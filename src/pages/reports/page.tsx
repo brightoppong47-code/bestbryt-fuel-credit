@@ -2,7 +2,7 @@ import CollectionsReport from "./_components/CollectionsReport.tsx";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import { Authenticated } from "convex/react";
-import { useState } from "react";
+import { Component, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
@@ -261,13 +261,51 @@ function EodReportsSection() {
 
 // ─── Main Reports Page ────────────────────────────────────────────────────────
 
+
+class ReportErrorBoundary extends Component<
+  { children: ReactNode; title: string },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: unknown) {
+    return { error: error instanceof Error ? error : new Error(String(error)) };
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <Card role="alert">
+          <CardContent className="p-4 space-y-3">
+            <h2 className="font-semibold">{this.props.title} could not load</h2>
+            <p className="text-sm text-muted-foreground">
+              This section encountered an error. Other report sections and the menu are still available.
+            </p>
+            <details className="text-sm" open>
+              <summary className="cursor-pointer font-medium">Error details</summary>
+              <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-xs">
+                {this.state.error.message}
+              </pre>
+            </details>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={() => this.setState({ error: null })}>Try again</Button>
+              <Button variant="secondary" asChild><Link to="/">Back to dashboard</Link></Button>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function ReportsInner() {
   return <div className="p-4 md:p-6 space-y-6 pb-10">
-    <CollectionsReport />
+    <ReportErrorBoundary title="Collections report"><CollectionsReport /></ReportErrorBoundary>
     <div><h2 className="text-base font-bold mb-3">Submitted branch end-of-day reports</h2>
-      <p className="text-xs text-muted-foreground mb-3">Previously submitted snapshots across branches. The collection filters above do not change these historical submissions.</p><EodReportsSection /></div>
+      <p className="text-xs text-muted-foreground mb-3">Previously submitted snapshots across branches. The collection filters above do not change these historical submissions.</p><ReportErrorBoundary title="End-of-day reports"><EodReportsSection /></ReportErrorBoundary></div>
     <div><h2 className="text-base font-bold mb-3">Current outstanding balances</h2>
-      <p className="text-xs text-muted-foreground mb-3">Current unpaid balances across accessible branches, independent of the collection date range.</p><OutstandingList /></div>
+      <p className="text-xs text-muted-foreground mb-3">Current unpaid balances across accessible branches, independent of the collection date range.</p><ReportErrorBoundary title="Outstanding balances"><OutstandingList /></ReportErrorBoundary></div>
   </div>;
 }
 
