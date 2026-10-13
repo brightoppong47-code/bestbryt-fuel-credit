@@ -14,7 +14,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           "openid profile email offline_access",
         redirect_uri:
           import.meta.env.VITE_HERCULES_OIDC_REDIRECT_URI ??
-          `${window.location.origin}/auth/callback`,
+          `${window.location.origin}${import.meta.env.BASE_URL}auth/callback`,
       }}
     >
       {children}

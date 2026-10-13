@@ -41,7 +41,7 @@ export function useServiceWorker() {
     };
 
     navigator.serviceWorker
-      .register("/sw.js")
+      .register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL })
       .then((reg) => {
         registration = reg;
 

@@ -1,16 +1,17 @@
 // Bump this version on every publish — it signals existing installs to update.
-const CACHE_NAME = "bbv-assets-v3";
-const OFFLINE_URL = "/offline.html";
+const CACHE_PREFIX = `bbv-${new URL(self.registration.scope).pathname}-`;
+const CACHE_NAME = `${CACHE_PREFIX}assets-v4`;
+const OFFLINE_URL = new URL("offline.html", self.registration.scope).href;
 
 // Static assets to pre-cache on install
 const PRECACHE_URLS = [
   OFFLINE_URL,
-  "/icon/icon-192.png",
-  "/icon/icon-512.png",
-  "/icon/icon-maskable-192.png",
-  "/icon/icon-maskable-512.png",
-  "/manifest.json",
-];
+  "icon/icon-192.png",
+  "icon/icon-512.png",
+  "icon/icon-maskable-192.png",
+  "icon/icon-maskable-512.png",
+  "site.webmanifest",
+ ].map(url => new URL(url, self.registration.scope).href);
 
 // ── Install: pre-cache known static assets ───────────────────────────────────
 self.addEventListener("install", (event) => {
@@ -32,7 +33,7 @@ self.addEventListener("activate", (event) => {
       .keys()
       .then((names) =>
         Promise.all(
-          names.map((name) => (name !== CACHE_NAME ? caches.delete(name) : undefined))
+          names.map((name) => (name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME ? caches.delete(name) : undefined))
         )
       )
       .then(() => self.clients.claim())

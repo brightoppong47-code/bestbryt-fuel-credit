@@ -24,7 +24,7 @@ export default function App() {
   useAppAppearance(); // Apply stored theme/colour settings on mount
   return (
     <DefaultProviders>
-      <BrowserRouter>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
         <Routes>
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route element={<AppLayout />}>

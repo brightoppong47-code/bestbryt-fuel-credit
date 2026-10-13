@@ -61,7 +61,7 @@ export default function PwaInstallBanner() {
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-sm">
       <div className="bg-sidebar text-sidebar-foreground rounded-xl shadow-2xl border border-sidebar-border p-4 flex items-start gap-3">
-        <img src="/icon/icon-192.png" alt="BBV Fuel icon" className="w-12 h-12 rounded-xl shrink-0" />
+        <img src={`${import.meta.env.BASE_URL}icon/icon-192.png`} alt="BBV Fuel icon" className="w-12 h-12 rounded-xl shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm">Install BBV Fuel</p>
           {isIos ? (
