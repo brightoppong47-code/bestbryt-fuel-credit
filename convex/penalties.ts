@@ -1,3 +1,4 @@
+import { penaltyDays } from "./lib/penaltyDays";
 import { internalMutation } from "./_generated/server";
 
 const PENALTY_RATE = 0.05;
@@ -43,7 +44,7 @@ export const updatePenaltiesAndStatuses = internalMutation({
       const newStatus: "pending" | "overdue" = days > 0 ? "overdue" : "pending";
       const newPenalty =
         days > 0
-          ? Math.round(tx.totalOwedGhs * PENALTY_RATE * days * 100) / 100
+          ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100
           : 0;
 
       // Only write if something has actually changed
