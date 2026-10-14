@@ -2,6 +2,7 @@
  * Global app settings — logo and other org-wide preferences.
  * The settings document uses key="global" as a singleton.
  */
+import type { QueryCtx, MutationCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireOwner, requireStaff } from "./helpers";
@@ -17,11 +18,11 @@ export const getAppSettings = query({
       .query("app_settings")
       .withIndex("by_key", (q) => q.eq("key", SETTINGS_KEY))
       .unique();
-    if (!doc) return { logoUrl: null };
+    if (!doc) return { logoUrl: null, interestRatePercent: 5 };
     const logoUrl = doc.logoStorageId
       ? await ctx.storage.getUrl(doc.logoStorageId)
       : null;
-    return { logoUrl };
+    return { logoUrl, interestRatePercent: doc.interestRatePercent ?? 5 };
   },
 });
 
@@ -63,5 +64,21 @@ export const removeLogo = mutation({
     if (existing) {
       await ctx.db.patch("app_settings", existing._id, { logoStorageId: undefined });
     }
+  },
+});
+
+export async function readInterestRatePercent(ctx: QueryCtx | MutationCtx) {
+  const settings = await ctx.db.query("app_settings").withIndex("by_key", q => q.eq("key", SETTINGS_KEY)).unique();
+  return settings?.interestRatePercent ?? 5;
+}
+
+export const setInterestRate = mutation({
+  args: { interestRatePercent: v.number() },
+  handler: async (ctx, args) => {
+    await requireOwner(ctx);
+    if (!Number.isFinite(args.interestRatePercent) || args.interestRatePercent < 0) throw new Error("Enter a valid percentage of zero or greater");
+    const existing = await ctx.db.query("app_settings").withIndex("by_key", q => q.eq("key", SETTINGS_KEY)).unique();
+    if (existing) await ctx.db.patch(existing._id, { interestRatePercent: args.interestRatePercent });
+    else await ctx.db.insert("app_settings", { key: SETTINGS_KEY, interestRatePercent: args.interestRatePercent });
   },
 });
