@@ -124,6 +124,7 @@ export type CreditReceiptData = {
   vehiclePlate: string;
   fuelAmountGhs: number;
   interestGhs: number;
+  interestRatePercent?: number;
   interestCollectedUpfront: boolean;
   totalOwedGhs: number;
   issuedByName: string;
@@ -139,6 +140,7 @@ export type PaymentReceiptData = {
   branchName: string;
   fuelAmountGhs: number;
   interestGhs: number;
+  interestRatePercent?: number;
   totalOwedGhs: number;
   penaltyGhs: number;
   liveTotal: number;
@@ -188,8 +190,8 @@ export function generateCreditReceipt(data: CreditReceiptData): void {
     ["Fuel Principal", `GHS ${fmt(data.fuelAmountGhs)}`],
     [
       data.interestCollectedUpfront
-        ? "Interest (5%) — collected upfront"
-        : "Interest (5%)",
+        ? `Interest (${data.interestRatePercent ?? 5}%) — collected upfront`
+        : `Interest (${data.interestRatePercent ?? 5}%)`,
       `GHS ${fmt(data.interestGhs)}`,
     ],
   ];
@@ -301,7 +303,7 @@ export function generatePaymentReceipt(data: PaymentReceiptData): void {
 
   const rows: [string, string][] = [
     ["Fuel Principal", `GHS ${fmt(data.fuelAmountGhs)}`],
-    ["Interest (5%)", `GHS ${fmt(data.interestGhs)}`],
+    [`Interest (${data.interestRatePercent ?? 5}%)`, `GHS ${fmt(data.interestGhs)}`],
     ["Sub-total (Principal + Interest)", `GHS ${fmt(data.totalOwedGhs)}`],
   ];
 
