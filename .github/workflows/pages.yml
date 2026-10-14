@@ -26,7 +26,7 @@ jobs:
       - name: Build website
         env:
           VITE_BASE_PATH: /bestbryt-fuel-credit/
-          VITE_CONVEX_URL: ${{ secrets.VITE_CONVEX_URL }}
+          VITE_CONVEX_URL: https://blissful-hawk-149.convex.cloud
           VITE_HERCULES_OIDC_AUTHORITY: ${{ secrets.VITE_HERCULES_OIDC_AUTHORITY }}
           VITE_HERCULES_OIDC_CLIENT_ID: ${{ secrets.VITE_HERCULES_OIDC_CLIENT_ID }}
           VITE_HERCULES_WEBSITE_ID: 01M0CT57Y07T916YEXC6GKE4QR
