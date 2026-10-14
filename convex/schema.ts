@@ -83,6 +83,7 @@ export default defineSchema({
     // Amounts
     fuelAmountGhs: v.number(),
     interestGhs: v.number(),
+    interestRatePercent: v.optional(v.number()),
     totalOwedGhs: v.number(),
     // Whether interest was collected from the driver upfront (at time of issuing)
     interestCollectedUpfront: v.optional(v.boolean()),
@@ -173,6 +174,7 @@ export default defineSchema({
   // Global app settings — single document, keyed by "global"
   app_settings: defineTable({
     key: v.string(),              // always "global"
+    interestRatePercent: v.optional(v.number()),
     logoStorageId: v.optional(v.id("_storage")),
   }).index("by_key", ["key"]),
 });
