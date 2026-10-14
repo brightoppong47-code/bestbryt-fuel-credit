@@ -38,6 +38,72 @@ import { BackupRestore } from "./_components/BackupRestore.tsx";
 import { DangerZone } from "./_components/DangerZone.tsx";
 import { cn } from "@/lib/utils.ts";
 
+type CorrectionTable = "drivers" | "transactions" | "payments" | "eod_reports";
+const CORRECTION_OPTIONS: Record<CorrectionTable,string> = {drivers:"Customers",transactions:"Fuel credits",payments:"Payments",eod_reports:"End-of-day reports"};
+const CORRECTION_FIELDS: Record<CorrectionTable,Array<[string,string,string]>> = {
+  drivers:[["fullName","Customer name","text"],["phone","Phone","text"],["address","Address","text"],["vehicleType","Vehicle type","text"],["vehiclePlate","Vehicle plate","text"],["gpsAddress","GPS address","text"],["witnessName","Witness name","text"],["witnessPhone","Witness phone","text"],["notes","Notes","text"],["isActive","Active customer","checkbox"]],
+  transactions:[["fuelAmountGhs","Fuel amount (GHS)","number"],["interestGhs","Interest (GHS)","number"],["interestCollectedUpfront","Interest collected upfront","checkbox"],["issuedAt","Issue date and time (Ghana UTC)","datetime-local"],["dueAt","Due date and time (Ghana UTC)","datetime-local"],["notes","Notes","text"]],
+  payments:[["amountGhs","Payment amount (GHS)","number"],["recordedAt","Payment date and time (Ghana UTC)","datetime-local"],["note","Note","text"]],
+  eod_reports:[["reportDate","Report date","date"],["customersServed","Customers served","number"],["creditsIssuedCount","Credits issued count","number"],["creditsIssuedGhs","Fuel credits (GHS)","number"],["interestCollectedGhs","Interest collected (GHS)","number"],["paymentsReceivedCount","Payments count","number"],["paymentsReceivedGhs","Payments received (GHS)","number"],["penaltiesCollectedGhs","Penalties collected (GHS)","number"],["notes","Notes","text"]],
+};
+function AdminCorrections() {
+  const [table,setTable]=useState<CorrectionTable>("transactions");
+  const [cursors,setCursors]=useState<Array<string|null>>([null]);
+  const [search,setSearch]=useState("");
+  const result=useQuery(api.admin.listCorrectionEntries,{table,paginationOpts:{numItems:25,cursor:cursors.at(-1) ?? null}});
+  const save=useMutation(api.admin.correctEntry);
+  const remove=useMutation(api.admin.deleteCorrectionEntry);
+  const [selected,setSelected]=useState<{id:Id<CorrectionTable>;data:string;title:string;linkedPayments:number}|null>(null);
+  const [values,setValues]=useState<Record<string,string|boolean>>({});
+  const [mode,setMode]=useState<"edit"|"delete">("edit");
+  const [confirmation,setConfirmation]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  function open(row:NonNullable<typeof selected>, action:"edit"|"delete") {
+    const data=JSON.parse(row.data) as Record<string,unknown>;
+    setValues(Object.fromEntries(CORRECTION_FIELDS[table].map(([key,,type])=>[key,type==="checkbox" ? Boolean(data[key]) : type==="datetime-local" ? String(data[key] ?? "").slice(0,19) : String(data[key] ?? "")])));
+    setSelected(row);setMode(action);setConfirmation("");setError("");
+  }
+  async function submit() {
+    if(!selected || busy) return;
+    setBusy(true);setError("");
+    try {
+      if(mode==="delete") await remove({table,id:selected.id,expected:selected.data});
+      else {
+        const changes:Record<string,unknown>={};
+        for(const [key,,type] of CORRECTION_FIELDS[table]) {
+          const value=values[key];
+          if(type==="number") { if(String(value).trim()==="") throw new Error("Amounts and counts are required"); changes[key]=Number(value); }
+          else if(type==="datetime-local") changes[key]=String(value)+"Z";
+          else changes[key]=value;
+        }
+        await save({table,id:selected.id,expected:selected.data,changes:JSON.stringify(changes)});
+      }
+      toast.success(mode==="delete" ? "Entry deleted successfully" : "Entry corrected successfully");
+      setSelected(null);
+    } catch(e) { setError(e instanceof Error ? e.message : "Correction failed"); }
+    finally {setBusy(false);}
+  }
+  return <Card><CardHeader><CardTitle>Admin corrections</CardTitle></CardHeader><CardContent className="space-y-4">
+    <p className="text-sm text-muted-foreground">Correct agent mistakes in customers, fuel credits, payments and submitted reports. Credit balances and collection totals update after financial corrections. Submitted end-of-day reports are historical snapshots; edit affected snapshots separately.</p>
+    <label className="block text-sm">Entry type<select className="block w-full rounded-md border bg-background p-2 mt-1" value={table} onChange={e=>{setTable(e.target.value as CorrectionTable);setCursors([null]);setSearch("");setSelected(null);}}>{Object.entries(CORRECTION_OPTIONS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
+    <Input placeholder="Search this page by customer, branch or date" value={search} onChange={e=>setSearch(e.target.value)}/>
+    {!result ? <Skeleton className="h-40"/> : <><div className="space-y-3">{result.page.filter(r=>(r.title+" "+r.branch+" "+r.date).toLowerCase().includes(search.toLowerCase())).map(row=>{
+      const record=JSON.parse(row.data) as Record<string,unknown>;
+      return <div key={row.id} className="rounded-lg border p-3 space-y-2"><p className="font-semibold">{row.title}</p><p className="text-sm text-muted-foreground">{row.branch} · {row.date.replace("T"," ").slice(0,19)}</p>
+      {table==="transactions" && <p className="text-sm">Fuel GHS {Number(record.fuelAmountGhs).toFixed(2)} · Paid GHS {Number(record.amountPaidGhs ?? 0).toFixed(2)} · {String(record.status)}</p>}
+      {table==="payments" && <p className="text-sm">GHS {Number(record.amountGhs).toFixed(2)}</p>}
+      <div className="flex gap-2"><Button size="sm" variant="secondary" onClick={()=>open(row,"edit")}>Edit</Button><Button size="sm" variant="destructive" onClick={()=>open(row,"delete")}>Delete</Button></div></div>;
+    })}</div>{!result.page.length && <p>No entries found.</p>}<div className="flex justify-between gap-2"><Button variant="secondary" disabled={cursors.length===1} onClick={()=>setCursors(c=>c.slice(0,-1))}>Previous</Button><Button variant="secondary" disabled={result.isDone} onClick={()=>setCursors(c=>[...c,result.continueCursor])}>Next</Button></div></>}
+    <Dialog open={!!selected} onOpenChange={open=>{if(!open && !busy)setSelected(null);}}><DialogContent className="max-h-[85vh] overflow-y-auto"><DialogHeader><DialogTitle>{mode==="edit" ? "Correct" : "Delete"} {CORRECTION_OPTIONS[table]} entry</DialogTitle></DialogHeader>
+      <p className="font-medium">{selected?.title}</p>
+      {mode==="edit" ? <div className="space-y-3">{CORRECTION_FIELDS[table].map(([key,label,type])=><label key={key} className="block text-sm space-y-1">{label}{type==="checkbox" ? <input className="ml-3" type="checkbox" checked={Boolean(values[key])} onChange={e=>setValues(v=>({...v,[key]:e.target.checked}))}/> : <Input type={type} min={type==="number" ? 0 : undefined} step={type==="number" ? "0.01" : type==="datetime-local" ? 1 : undefined} value={String(values[key] ?? "")} onChange={e=>setValues(v=>({...v,[key]:e.target.value}))}/>}</label>)}</div> : <div className="space-y-3"><p className="text-sm text-destructive">Deletion is permanent.{table==="transactions" ? " This also deletes "+selected?.linkedPayments+" linked payments and transaction message logs." : table==="payments" ? " The credit balance will be recalculated and may reopen." : table==="drivers" ? " Customers with credits or payments must have those entries corrected first." : " The submitted report will be removed."}</p><label className="block text-sm">Type DELETE to confirm<Input value={confirmation} onChange={e=>setConfirmation(e.target.value)}/></label></div>}
+      {error && <p role="alert" className="text-sm text-destructive whitespace-pre-wrap break-words">{error}</p>}
+      <DialogFooter><Button variant="secondary" disabled={busy} onClick={()=>setSelected(null)}>Cancel</Button><Button variant={mode==="delete" ? "destructive" : "default"} disabled={busy || (mode==="delete" && confirmation!=="DELETE")} onClick={submit}>{busy ? "Saving…" : mode==="delete" ? "Delete entry" : "Save correction"}</Button></DialogFooter>
+    </DialogContent></Dialog>
+  </CardContent></Card>;
+}
+
 type Role = "owner" | "staff" | "branch_secretary" | "risk_manager";
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -337,13 +403,14 @@ function RoleHint({ role }: { role: Role }) {
 
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 
-type SettingsTab = "team" | "appearance" | "backup" | "danger";
+type SettingsTab = "team" | "appearance" | "backup" | "danger" | "corrections";
 
 const TAB_CONFIG: { id: SettingsTab; label: string; icon: React.ComponentType<{ className?: string }>; ownerOnly?: boolean }[] = [
   { id: "team", label: "Team & Branches", icon: Users },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "backup", label: "Backup", icon: Database },
   { id: "danger", label: "Danger Zone", icon: AlertTriangle, ownerOnly: true },
+  { id: "corrections", label: "Corrections", icon: ShieldCheck, ownerOnly: true },
 ];
 
 export default function SettingsPage() {
@@ -640,6 +707,7 @@ export default function SettingsPage() {
 
       {/* ── Danger Zone tab (owner only) ─────────────────────────────────── */}
       {activeTab === "danger" && isOwner && <DangerZone />}
+      {activeTab === "corrections" && isOwner && <AdminCorrections />}
 
       {/* ── Dialogs ───────────────────────────────────────────────────────── */}
       <CreateBranchDialog open={createBranchOpen} onClose={() => setCreateBranchOpen(false)} />
