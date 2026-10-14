@@ -4,7 +4,7 @@ import { mutation, query } from "./_generated/server";
 import { requireStaff, requireRiskManagerOrOwner } from "./helpers";
 import { paginationOptsValidator } from "convex/server";
 
-const INTEREST_RATE = 0.05;
+import { readInterestRatePercent } from "./appSettings";
 const PENALTY_RATE = 0.05;
 const DUE_HOURS = 24;
 
@@ -25,6 +25,7 @@ export const issueCredit = mutation({
     driverId: v.id("drivers"),
     fuelAmountGhs: v.number(),
     interestCollectedUpfront: v.optional(v.boolean()),
+    expectedInterestRatePercent: v.optional(v.number()),
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -82,7 +83,10 @@ export const issueCredit = mutation({
       }
     }
 
-    const interestGhs = Math.round(args.fuelAmountGhs * INTEREST_RATE * 100) / 100;
+    const interestRatePercent = await readInterestRatePercent(ctx);
+    if ((args.expectedInterestRatePercent ?? 5) !== interestRatePercent) throw new ConvexError({message:"The interest percentage changed. Refresh the credit form and confirm the new interest amount before issuing.",code:"RATE_CHANGED"});
+    const interestGhs = Math.round(args.fuelAmountGhs * interestRatePercent) / 100;
+    if (!Number.isFinite(interestGhs)) throw new Error("Interest amount is too large");
     const issuedAt = new Date().toISOString();
     const dueAt = addHours(issuedAt, DUE_HOURS);
 
@@ -95,6 +99,7 @@ export const issueCredit = mutation({
       driverId: args.driverId,
       fuelAmountGhs: args.fuelAmountGhs,
       interestGhs,
+      interestRatePercent,
       totalOwedGhs,
       interestCollectedUpfront: args.interestCollectedUpfront ?? false,
       issuedAt,
