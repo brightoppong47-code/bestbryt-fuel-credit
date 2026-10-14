@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireStaff, requireOwner } from "./helpers.ts";
 
 const PENALTY_RATE = 0.05;
@@ -250,6 +251,9 @@ export const collections = query({
     const txMap = new Map(transactions.map(t => [t._id, t]));
     const driverMap = new Map(drivers.map(d => [d._id, d]));
     const branchMap = new Map(branches.map(b => [b._id, b]));
+    const branchCredits = new Map<string, { branchId: string; branch: string; creditsCount: number; creditsGhs: number }>(
+      branches.filter(b => !branchId || b._id === branchId).map(b => [b._id, { branchId: b._id, branch: b.name, creditsCount: 0, creditsGhs: 0 }])
+    );
     const inRange = (at: string) => at.slice(0, 10) >= args.fromDate && at.slice(0, 10) <= args.toDate;
     const totals = { principalGhs: 0, interestGhs: 0, penaltyGhs: 0, cashGhs: 0, creditsGhs: 0, paymentsCount: 0, reconstructedCount: 0 };
     const daily = new Map<string, { date: string; principalGhs: number; interestGhs: number; penaltyGhs: number; cashGhs: number; creditsGhs: number }>();
@@ -286,6 +290,11 @@ export const collections = query({
       if (!inRange(tx.issuedAt) || (branchId && driver?.branchId !== branchId)) continue;
       const d = day(tx.issuedAt);
       totals.creditsGhs += tx.fuelAmountGhs; d.creditsGhs += tx.fuelAmountGhs;
+      const creditBranchId = driver?.branchId ?? "unknown";
+      if (!branchCredits.has(creditBranchId)) branchCredits.set(creditBranchId, { branchId: creditBranchId, branch: branchMap.get(creditBranchId as Id<"branches">)?.name ?? "Unknown branch", creditsCount: 0, creditsGhs: 0 });
+      const creditBranch = branchCredits.get(creditBranchId)!;
+      creditBranch.creditsCount++;
+      creditBranch.creditsGhs += tx.fuelAmountGhs;
       if (tx.interestCollectedUpfront) {
         totals.interestGhs += tx.interestGhs; totals.cashGhs += tx.interestGhs;
         d.interestGhs += tx.interestGhs; d.cashGhs += tx.interestGhs;
@@ -296,6 +305,7 @@ export const collections = query({
     for (const key of ["principalGhs", "interestGhs", "penaltyGhs", "cashGhs", "creditsGhs"] as const) {
       totals[key] = round(totals[key]); for (const d of daily.values()) d[key] = round(d[key]);
     }
-    return { totals, daily: [...daily.values()].sort((a,b) => a.date.localeCompare(b.date)), rows: rows.sort((a,b) => b.date.localeCompare(a.date)) };
+    const creditSummary = [...branchCredits.values()].map(b => ({ ...b, creditsGhs: round(b.creditsGhs) })).sort((a,b) => a.branch.localeCompare(b.branch));
+    return { totals, branchCredits: creditSummary, daily: [...daily.values()].sort((a,b) => a.date.localeCompare(b.date)), rows: rows.sort((a,b) => b.date.localeCompare(a.date)) };
   },
 });
