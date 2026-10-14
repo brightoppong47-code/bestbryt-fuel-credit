@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Component, useState, type ReactNode } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
@@ -37,6 +37,21 @@ import { AppearanceSettings } from "./_components/AppearanceSettings.tsx";
 import { BackupRestore } from "./_components/BackupRestore.tsx";
 import { DangerZone } from "./_components/DangerZone.tsx";
 import { cn } from "@/lib/utils.ts";
+
+class CorrectionsBoundary extends Component<{children: ReactNode}, {error: Error | null}> {
+  state: {error: Error | null} = {error: null};
+  static getDerivedStateFromError(error: unknown) {
+    return {error: error instanceof Error ? error : new Error(String(error))};
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return <Card role="alert"><CardHeader><CardTitle>Corrections could not load</CardTitle></CardHeader><CardContent className="space-y-3">
+      <p>The corrections service failed to respond. Other Settings tabs and the menu are still available.</p>
+      <details open><summary>Error details</summary><pre className="mt-2 whitespace-pre-wrap break-words text-xs">{this.state.error.message}</pre></details>
+      <Button variant="secondary" onClick={() => this.setState({error: null})}>Try again</Button>
+    </CardContent></Card>;
+  }
+}
 
 type CorrectionTable = "drivers" | "transactions" | "payments" | "eod_reports";
 const CORRECTION_OPTIONS: Record<CorrectionTable,string> = {drivers:"Customers",transactions:"Fuel credits",payments:"Payments",eod_reports:"End-of-day reports"};
@@ -707,7 +722,7 @@ export default function SettingsPage() {
 
       {/* ── Danger Zone tab (owner only) ─────────────────────────────────── */}
       {activeTab === "danger" && isOwner && <DangerZone />}
-      {activeTab === "corrections" && isOwner && <AdminCorrections />}
+      {activeTab === "corrections" && isOwner && <CorrectionsBoundary><AdminCorrections /></CorrectionsBoundary>}
 
       {/* ── Dialogs ───────────────────────────────────────────────────────── */}
       <CreateBranchDialog open={createBranchOpen} onClose={() => setCreateBranchOpen(false)} />
