@@ -744,7 +744,7 @@ export default function SettingsPage() {
               <p><span className="font-medium text-foreground">Account Format:</span> <span className="font-mono text-primary">BBV-{"{BRANCH}"}-{"{000001}"}</span></p>
               <p><span className="font-medium text-foreground">Interest Rate:</span> {appSettings?.interestRatePercent ?? 5}% per transaction</p>
               <p><span className="font-medium text-foreground">Due Period:</span> 24 hours</p>
-              <p><span className="font-medium text-foreground">Penalty:</span> 5% per overdue day</p>
+              <p><span className="font-medium text-foreground">Penalty:</span> 5% per overdue day, Monday–Saturday (Sunday excluded)</p>
               <p><span className="font-medium text-foreground">Currency:</span> Ghana Cedis (GHS)</p>
             </CardContent>
           </Card>
