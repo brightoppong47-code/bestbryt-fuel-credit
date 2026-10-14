@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, usePaginatedQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -47,6 +47,9 @@ export default function IssueCreditPage() {
   const [arrearsBlock, setArrearsBlock] = useState<string | null>(null);
 
   const issueCredit = useMutation(api.transactions.issueCredit);
+  const appSettings = useQuery(api.appSettings.getAppSettings);
+  const interestRatePercent = appSettings?.interestRatePercent ?? 5;
+  useEffect(() => { setInterestCollected(false); }, [interestRatePercent]);
 
   const selectedDriver = useQuery(
     api.drivers.getDriver,
@@ -64,7 +67,7 @@ export default function IssueCreditPage() {
 
   const amountRaw = watch("fuelAmountGhs");
   const amount = parseFloat(amountRaw) || 0;
-  const interest = Math.round(amount * 0.05 * 100) / 100;
+  const interest = Math.round(amount * interestRatePercent) / 100;
   const total = Math.round((amount + interest) * 100) / 100;
 
   const handleAmountChange = () => {
@@ -93,6 +96,7 @@ export default function IssueCreditPage() {
         driverId: selectedDriverId as Id<"drivers">,
         fuelAmountGhs: parseFloat(values.fuelAmountGhs),
         interestCollectedUpfront: interestCollected,
+        expectedInterestRatePercent: interestRatePercent,
         notes: values.notes || undefined,
       });
       toast.success("Fuel credit issued successfully!");
@@ -229,7 +233,7 @@ export default function IssueCreditPage() {
                   <span className="font-medium">GHS {fmt(amount)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Interest (5%) — collect now</span>
+                  <span className="text-muted-foreground">Interest ({interestRatePercent}%) — collect now</span>
                   <span className="font-medium text-amber-600 dark:text-amber-400">GHS {fmt(interest)}</span>
                 </div>
                 <Separator />
@@ -288,7 +292,7 @@ export default function IssueCreditPage() {
                     Receive <span className="font-bold">GHS {fmt(interest)}</span> from driver now
                   </p>
                   <div className="flex items-center gap-3 mt-2 text-xs text-amber-700 dark:text-amber-500">
-                    <span className="flex items-center gap-1"><TrendingUp className="w-3 h-3" /> 5% of GHS {fmt(amount)}</span>
+                    <span className="flex items-center gap-1"><TrendingUp className="w-3 h-3" /> {interestRatePercent}% of GHS {fmt(amount)}</span>
                     <span className="flex items-center gap-1"><Banknote className="w-3 h-3" /> Cash on the spot</span>
                   </div>
                 </div>
@@ -341,7 +345,7 @@ export default function IssueCreditPage() {
           type="submit"
           className="w-full gap-2"
           size="lg"
-          disabled={isSubmitting || (amount > 0 && !interestCollected) || !!arrearsBlock}
+          disabled={!appSettings || isSubmitting || (amount > 0 && !interestCollected) || !!arrearsBlock}
         >
           {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
           {isSubmitting
