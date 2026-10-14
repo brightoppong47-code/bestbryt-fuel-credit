@@ -416,12 +416,48 @@ function RoleHint({ role }: { role: Role }) {
   );
 }
 
+function InterestRateSettings() {
+  const settings = useQuery(api.appSettings.getAppSettings);
+  const saveRate = useMutation(api.appSettings.setInterestRate);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  if (!settings) return <Skeleton className="h-48 w-full" />;
+  const value = draft ?? String(settings.interestRatePercent);
+  const rate = Number(value);
+  const valid = value.trim() !== "" && Number.isFinite(rate) && rate >= 0;
+  async function save() {
+    if (!valid) return;
+    setSaving(true);
+    try {
+      await saveRate({ interestRatePercent: rate });
+      setDraft(null);
+      toast.success("Interest percentage saved.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save interest percentage.");
+    } finally { setSaving(false); }
+  }
+  return <Card>
+    <CardHeader><CardTitle>Interest percentage</CardTitle></CardHeader>
+    <CardContent className="space-y-4">
+      <p className="text-sm text-muted-foreground">Applied to new fuel credits. Existing credits retain their original interest rate and amount.</p>
+      <div className="space-y-2 max-w-sm">
+        <Label htmlFor="interest-percentage">Interest percentage (%)</Label>
+        <Input id="interest-percentage" type="number" min="0" step="any" value={value} onChange={e => setDraft(e.target.value)} disabled={saving} />
+        {!valid && <p className="text-sm text-destructive">Enter a percentage of zero or greater.</p>}
+      </div>
+      {valid && <p className="text-sm">For GHS 100.00 of fuel, interest is GHS {(Math.round(100 * rate) / 100).toFixed(2)}.</p>}
+      <Button onClick={save} disabled={saving || !valid || rate === settings.interestRatePercent}>{saving ? "Saving…" : "Save interest percentage"}</Button>
+    </CardContent>
+  </Card>;
+}
+
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 
-type SettingsTab = "team" | "appearance" | "backup" | "danger" | "corrections";
+type SettingsTab = "team" | "business" | "appearance" | "backup" | "danger" | "corrections";
 
 const TAB_CONFIG: { id: SettingsTab; label: string; icon: React.ComponentType<{ className?: string }>; ownerOnly?: boolean }[] = [
   { id: "team", label: "Team & Branches", icon: Users },
+  { id: "business", label: "Business", icon: Building2, ownerOnly: true },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "backup", label: "Backup", icon: Database },
   { id: "danger", label: "Danger Zone", icon: AlertTriangle, ownerOnly: true },
@@ -433,6 +469,7 @@ export default function SettingsPage() {
   const invites = useQuery(api.users.listInvites);
   const branches = useQuery(api.branches.listBranches);
   const currentUser = useQuery(api.users.getCurrentUserData);
+  const appSettings = useQuery(api.appSettings.getAppSettings);
   const deleteInvite = useMutation(api.users.deleteInvite);
 
   const [activeTab, setActiveTab] = useState<SettingsTab>("team");
@@ -705,7 +742,7 @@ export default function SettingsPage() {
             <CardContent className="space-y-2 text-sm text-muted-foreground">
               <p><span className="font-medium text-foreground">Business:</span> BESTBRYT VENTURES</p>
               <p><span className="font-medium text-foreground">Account Format:</span> <span className="font-mono text-primary">BBV-{"{BRANCH}"}-{"{000001}"}</span></p>
-              <p><span className="font-medium text-foreground">Interest Rate:</span> 5% per transaction</p>
+              <p><span className="font-medium text-foreground">Interest Rate:</span> {appSettings?.interestRatePercent ?? 5}% per transaction</p>
               <p><span className="font-medium text-foreground">Due Period:</span> 24 hours</p>
               <p><span className="font-medium text-foreground">Penalty:</span> 5% per overdue day</p>
               <p><span className="font-medium text-foreground">Currency:</span> Ghana Cedis (GHS)</p>
@@ -715,6 +752,7 @@ export default function SettingsPage() {
       )}
 
       {/* ── Appearance tab ──────────────────────────────────────────────── */}
+      {activeTab === "business" && isOwner && <InterestRateSettings />}
       {activeTab === "appearance" && <AppearanceSettings />}
 
       {/* ── Backup tab ──────────────────────────────────────────────────── */}
