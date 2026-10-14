@@ -24,9 +24,11 @@ export default function CollectionsReport() {
   const branchName = branchId === "all" ? "All accessible branches" : branches?.find(b => b._id === branchId)?.name ?? "Selected branch";
   const headings = ["Date", "Customer", "Branch", "Type", "Payments received (principal)", "Interest collected", "Penalties collected", "Total cash", "Allocation"];
   const exportRows = report?.rows.map(r => [r.date.replace("T", " ").slice(0,19), r.customer, r.branch, r.kind, money(r.principalGhs), money(r.interestGhs), money(r.penaltyGhs), money(r.cashGhs), r.reconstructed ? "Reconstructed" : "Recorded"]) ?? [];
+  const creditHeadings = ["Branch", "Credits issued", "Fuel credited (GHS)"];
+  const creditRows = report?.branchCredits.map(b => [b.branch, String(b.creditsCount), money(b.creditsGhs)]) ?? [];
   function csv() {
     if (!report) return;
-    const contents = Papa.unparse([headings, ...exportRows, ["TOTAL", "", "", "", money(report.totals.principalGhs), money(report.totals.interestGhs), money(report.totals.penaltyGhs), money(report.totals.cashGhs), ""]]);
+    const contents = Papa.unparse([["Fuel credited by branch", fromDate, toDate], creditHeadings, ...creditRows, ["TOTAL", String(report.branchCredits.reduce((n,b) => n+b.creditsCount,0)), money(report.totals.creditsGhs)], [], headings, ...exportRows, ["TOTAL", "", "", "", money(report.totals.principalGhs), money(report.totals.interestGhs), money(report.totals.penaltyGhs), money(report.totals.cashGhs), ""]]);
     const url = URL.createObjectURL(new Blob(["\ufeff"+contents], {type: "text/csv;charset=utf-8"}));
     const link = document.createElement("a"); link.href=url; link.download=`BBV-collections-${fromDate}-${toDate}.csv`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
@@ -38,7 +40,11 @@ export default function CollectionsReport() {
     doc.text(`Principal: GHS ${money(report.totals.principalGhs)}   Interest: GHS ${money(report.totals.interestGhs)}   Penalties: GHS ${money(report.totals.penaltyGhs)}   Total cash: GHS ${money(report.totals.cashGhs)}`,14,34);
     doc.text("Repayments settle principal first, then deferred interest, then penalties. Upfront interest is included in cash.",14,42);
     if (report.totals.reconstructedCount) doc.text(`${report.totals.reconstructedCount} older repayment allocations reconstructed using this order.`,14,50);
-    autoTable(doc,{ startY: 56, head: [headings], body: exportRows, foot: [["TOTAL", "", "", "", money(report.totals.principalGhs), money(report.totals.interestGhs), money(report.totals.penaltyGhs), money(report.totals.cashGhs), ""]], styles: {fontSize: 7}, headStyles: { fillColor: [15,40,80] }});
+    doc.text("Fuel credited by branch (fuel amount only; issued within the selected dates)",14,58);
+    autoTable(doc, {startY: 63, head: [creditHeadings], body: creditRows, foot: [["TOTAL", String(report.branchCredits.reduce((n,b) => n+b.creditsCount,0)), money(report.totals.creditsGhs)]], styles: {fontSize: 9}, headStyles: {fillColor: [15,40,80]}});
+    doc.addPage();
+    doc.text("Collection details",14,18);
+    autoTable(doc,{ startY: 24, head: [headings], body: exportRows, foot: [["TOTAL", "", "", "", money(report.totals.principalGhs), money(report.totals.interestGhs), money(report.totals.penaltyGhs), money(report.totals.cashGhs), ""]], styles: {fontSize: 7}, headStyles: { fillColor: [15,40,80] }});
     doc.save(`BBV-collections-${fromDate}-${toDate}.pdf`);
   }
   return <section className="space-y-4">
@@ -52,6 +58,7 @@ export default function CollectionsReport() {
     <p className="text-xs text-muted-foreground">Total cash = principal payments + interest collected + penalties collected. Partial repayments settle principal first, then unpaid interest, then penalties.</p>
     {valid && report?.totals.reconstructedCount ? <p className="text-sm rounded-md bg-muted p-3">{report.totals.reconstructedCount} older payment splits are reconstructed using that order; they were not originally recorded separately.</p> : null}
     {!valid ? null : !report ? <p>Loading collections…</p> : <>
+      <Card><CardContent className="p-4"><h2 className="font-semibold mb-2">Fuel credited by branch</h2><p className="text-xs text-muted-foreground mb-3">Fuel amounts issued during the selected dates, excluding interest and penalties. Uses the same branch filter above.</p><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>{creditHeadings.map(h=><th key={h} className="p-2 text-left whitespace-nowrap">{h}</th>)}</tr></thead><tbody>{creditRows.map((row,i)=><tr key={report.branchCredits[i].branchId} className="border-t">{row.map((cell,j)=><td key={j} className="p-2 whitespace-nowrap">{cell}</td>)}</tr>)}</tbody><tfoot><tr className="border-t font-semibold"><td className="p-2">Total</td><td className="p-2">{report.branchCredits.reduce((n,b)=>n+b.creditsCount,0)}</td><td className="p-2">GHS {money(report.totals.creditsGhs)}</td></tr></tfoot></table></div></CardContent></Card>
       <Card><CardContent className="p-4"><h2 className="font-semibold mb-3">Daily collections</h2>{!report.daily.length ? <p className="text-sm text-muted-foreground">No activity in the selected dates and branch.</p> : <ResponsiveContainer width="100%" height={240}><BarChart data={report.daily}><XAxis dataKey="date" tick={{fontSize:10}}/><YAxis/><Tooltip/><Legend/><Bar dataKey="principalGhs" name="Principal" stackId="cash" fill="#0B5ED7"/><Bar dataKey="interestGhs" name="Interest" stackId="cash" fill="#16a34a"/><Bar dataKey="penaltyGhs" name="Penalties" stackId="cash" fill="#d97706"/></BarChart></ResponsiveContainer>}</CardContent></Card>
       <Card><CardContent className="p-4"><h2 className="font-semibold mb-3">Collection details ({report.rows.length})</h2><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>{headings.map(h=><th key={h} className="p-2 text-left whitespace-nowrap">{h}</th>)}</tr></thead><tbody>{exportRows.map((row,i)=><tr key={i} className="border-t">{row.map((cell,j)=><td key={j} className="p-2 whitespace-nowrap">{cell}</td>)}</tr>)}</tbody></table></div>{!report.rows.length && <p className="text-sm text-muted-foreground">No cash received for these filters.</p>}</CardContent></Card>
     </>}
