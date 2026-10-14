@@ -34,6 +34,19 @@ describe("collections accounting", () => {
     expect(all.totals).toMatchObject({ principalGhs: 200, interestGhs: 10, penaltyGhs: 30, cashGhs: 240 });
     const other = await client.query(api.reports.collections, { fromDate: "2026-10-01", toDate: "2026-10-04", branchId: ids.other });
     expect(other.totals.cashGhs).toBe(0);
+    const fuel = await client.query(api.exports.collections, {fromDate:"2026-10-01",toDate:"2026-10-04"});
+    expect(fuel.branchCredits).toEqual([
+      {branchId:ids.branchId,branch:"Main",creditsCount:1,creditsGhs:200},
+      {branchId:ids.other,branch:"Other",creditsCount:0,creditsGhs:0},
+    ]);
+    expect(fuel.branchCredits.reduce((n,b)=>n+b.creditsGhs,0)).toBe(fuel.totals.creditsGhs);
+    const outside = await client.query(api.exports.collections, {fromDate:"2026-10-04",toDate:"2026-10-04",branchId:ids.branchId});
+    expect(outside.branchCredits).toEqual([{branchId:ids.branchId,branch:"Main",creditsCount:0,creditsGhs:0}]);
+    await t.run(async ctx=>ctx.db.insert("users",{role:"branch_secretary",branchId:ids.branchId,tokenIdentifier:"test|secretary"}));
+    const secretary=t.withIdentity({tokenIdentifier:"test|secretary"});
+    const scoped=await secretary.query(api.exports.collections,{fromDate:"2026-10-01",toDate:"2026-10-04"});
+    expect(scoped.branchCredits).toEqual([{branchId:ids.branchId,branch:"Main",creditsCount:1,creditsGhs:200}]);
+    await expect(secretary.query(api.exports.collections,{fromDate:"2026-10-01",toDate:"2026-10-04",branchId:ids.other})).rejects.toThrow("assigned branch");
     await expect(client.query(api.reports.collections, { fromDate: "2026-10-05", toDate: "2026-10-04" })).rejects.toThrow();
   });
   it("saves separate repayment components and rejects excess payments", async () => {
