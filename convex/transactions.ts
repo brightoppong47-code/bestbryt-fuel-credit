@@ -1,3 +1,4 @@
+import { penaltyDays } from "./lib/penaltyDays";
 import { allocatePayment } from "./lib/paymentAllocation";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
@@ -62,7 +63,7 @@ export const issueCredit = mutation({
         if (tx.status === "paid") continue;
         const days = overdueDays(tx.dueAt, now);
         const penalty = days > 0
-          ? Math.round(tx.totalOwedGhs * PENALTY_RATE * days * 100) / 100
+          ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100
           : 0;
         const liveTotal = Math.round((tx.totalOwedGhs + penalty) * 100) / 100;
         totalArrears += liveTotal;
@@ -127,7 +128,7 @@ export const markPaid = mutation({
     const days = overdueDays(tx.dueAt, now);
     const penaltyGhs =
       days > 0
-        ? Math.round(tx.totalOwedGhs * PENALTY_RATE * days * 100) / 100
+        ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100
         : 0;
     const liveTotal = Math.round((tx.totalOwedGhs + penaltyGhs) * 100) / 100;
     const existingPaid = tx.amountPaidGhs ?? 0;
@@ -174,7 +175,7 @@ export const recordPayment = mutation({
     const now = new Date();
     const days = overdueDays(tx.dueAt, now);
     const penaltyGhs = days > 0
-      ? Math.round(tx.totalOwedGhs * PENALTY_RATE * days * 100) / 100
+      ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100
       : 0;
     const liveTotal = Math.round((tx.totalOwedGhs + penaltyGhs) * 100) / 100;
     const existingPaid = tx.amountPaidGhs ?? 0;
@@ -247,7 +248,7 @@ export const refreshPenalties = mutation({
     const newStatus = days > 0 ? "overdue" : "pending";
     const penaltyGhs =
       days > 0
-        ? Math.round(tx.totalOwedGhs * PENALTY_RATE * days * 100) / 100
+        ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100
         : 0;
 
     await ctx.db.patch(args.transactionId, {
@@ -300,7 +301,7 @@ export const listTransactions = query({
         const days = tx.status !== "paid" ? overdueDays(tx.dueAt, now) : 0;
         const livePenalty =
           days > 0
-            ? Math.round(tx.totalOwedGhs * PENALTY_RATE * days * 100) / 100
+            ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100
             : tx.penaltyGhs;
         const liveTotal = Math.round((tx.totalOwedGhs + livePenalty) * 100) / 100;
         const liveStatus: "pending" | "paid" | "overdue" =
@@ -334,7 +335,7 @@ export const getTransaction = query({
     const days = tx.status !== "paid" ? overdueDays(tx.dueAt, now) : 0;
     const livePenalty =
       days > 0
-        ? Math.round(tx.totalOwedGhs * PENALTY_RATE * days * 100) / 100
+        ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100
         : tx.penaltyGhs;
     const liveTotal = Math.round((tx.totalOwedGhs + livePenalty) * 100) / 100;
     const liveStatus: "pending" | "paid" | "overdue" =
@@ -375,7 +376,7 @@ export const getDriverBalance = query({
     for (const tx of txs) {
       if (tx.status === "paid") { paidCount++; continue; }
       const days = overdueDays(tx.dueAt, now);
-      const penalty = days > 0 ? Math.round(tx.totalOwedGhs * PENALTY_RATE * days * 100) / 100 : 0;
+      const penalty = days > 0 ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100 : 0;
       const remaining = Math.max(0, (tx.totalOwedGhs + penalty) - (tx.amountPaidGhs ?? 0));
       totalOwed += remaining;
       if (days > 0) overdueCount++;
@@ -415,7 +416,7 @@ export const getDashboardStats = query({
     let overdueCount = 0;
     for (const tx of open) {
       const days = overdueDays(tx.dueAt, now);
-      const penalty = days > 0 ? Math.round(tx.totalOwedGhs * PENALTY_RATE * days * 100) / 100 : 0;
+      const penalty = days > 0 ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100 : 0;
       const remaining = Math.max(0, (tx.totalOwedGhs + penalty) - (tx.amountPaidGhs ?? 0));
       totalOutstandingGhs += remaining;
       if (days > 0) overdueCount++;
@@ -493,7 +494,7 @@ export const getOutstandingBalances = query({
     const enriched = await Promise.all(open.map(async (tx) => {
       const driver = await ctx.db.get(tx.driverId);
       const days = overdueDays(tx.dueAt, now);
-      const penalty = days > 0 ? Math.round(tx.totalOwedGhs * PENALTY_RATE * days * 100) / 100 : 0;
+      const penalty = days > 0 ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100 : 0;
       const liveTotal = Math.round((tx.totalOwedGhs + penalty) * 100) / 100;
       const remaining = Math.max(0, liveTotal - (tx.amountPaidGhs ?? 0));
       return {
@@ -553,7 +554,7 @@ export const getOverdueAlerts = query({
       if (msOverdue < THREE_DAYS_MS) continue;
 
       const days = Math.floor(msOverdue / (1000 * 60 * 60 * 24));
-      const penalty = Math.round(tx.totalOwedGhs * PENALTY_RATE * days * 100) / 100;
+      const penalty = Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100;
       const liveTotal = Math.round((tx.totalOwedGhs + penalty) * 100) / 100;
       const remaining = Math.max(0, Math.round((liveTotal - (tx.amountPaidGhs ?? 0)) * 100) / 100);
 
