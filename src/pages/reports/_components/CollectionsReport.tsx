@@ -20,7 +20,7 @@ export default function CollectionsReport() {
   const allBranches = useQuery(api.branches.listBranches);
   const branches = currentUser?.role === "branch_secretary" ? allBranches?.filter(b => b._id === currentUser.branchId) : allBranches;
   const valid = !!fromDate && !!toDate && fromDate <= toDate;
-  const report = useQuery(api.reports.collections, valid ? { fromDate, toDate, branchId: branchId === "all" ? undefined : branchId as Id<"branches"> } : "skip");
+  const report = useQuery(api.exports.collections, valid ? { fromDate, toDate, branchId: branchId === "all" ? undefined : branchId as Id<"branches"> } : "skip");
   const branchName = branchId === "all" ? "All accessible branches" : branches?.find(b => b._id === branchId)?.name ?? "Selected branch";
   const headings = ["Date", "Customer", "Branch", "Type", "Payments received (principal)", "Interest collected", "Penalties collected", "Total cash", "Allocation"];
   const exportRows = report?.rows.map(r => [r.date.replace("T", " ").slice(0,19), r.customer, r.branch, r.kind, money(r.principalGhs), money(r.interestGhs), money(r.penaltyGhs), money(r.cashGhs), r.reconstructed ? "Reconstructed" : "Recorded"]) ?? [];
