@@ -1,3 +1,4 @@
+import { penaltyDays } from "./lib/penaltyDays";
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -66,7 +67,7 @@ export const getAllTransactionsForExport = query({
 
         const days = tx.status !== "paid" ? overdueDays(tx.dueAt, now) : 0;
         const penalty = days > 0
-          ? Math.round(tx.totalOwedGhs * PENALTY_RATE * days * 100) / 100
+          ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100
           : tx.penaltyGhs;
         const liveTotal = Math.round((tx.totalOwedGhs + penalty) * 100) / 100;
         const remaining = Math.max(0, Math.round((liveTotal - (tx.amountPaidGhs ?? 0)) * 100) / 100);
@@ -144,7 +145,7 @@ export const getAllDriversForExport = query({
         for (const tx of txs) {
           if (tx.status === "paid") { paidCount++; continue; }
           const days = overdueDays(tx.dueAt, now);
-          const penalty = days > 0 ? Math.round(tx.totalOwedGhs * PENALTY_RATE * days * 100) / 100 : 0;
+          const penalty = days > 0 ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100 : 0;
           const remaining = Math.max(0, (tx.totalOwedGhs + penalty) - (tx.amountPaidGhs ?? 0));
           outstanding += remaining;
           if (days > 0) overdueCount++;
