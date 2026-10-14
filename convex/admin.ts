@@ -30,7 +30,8 @@ async function correctionBalance(ctx: MutationCtx, id: Id<"transactions">) {
   const total = correctionRound(owed + penaltyGhs);
   if (paid > total) throw new Error("Correction would make payments exceed the credit balance. Correct payments first.");
   const settled = paid >= total;
-  const last = payments.slice().sort((a,b) => a.recordedAt.localeCompare(b.recordedAt)).at(-1);
+  const orderedPayments = payments.slice().sort((a,b) => a.recordedAt.localeCompare(b.recordedAt));
+  const last = orderedPayments[orderedPayments.length - 1];
   await ctx.db.patch(id, { totalOwedGhs: owed, penaltyGhs, amountPaidGhs: paid,
     status: settled ? "paid" : Date.parse(tx.dueAt) < Date.now() ? "overdue" : "pending",
     paidAt: settled ? last?.recordedAt : undefined, paidBy: settled ? last?.recordedBy : undefined });
