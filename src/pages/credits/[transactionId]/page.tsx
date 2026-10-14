@@ -138,6 +138,7 @@ export default function TransactionDetailPage() {
         vehiclePlate: tx.driver.vehiclePlate,
         fuelAmountGhs: tx.fuelAmountGhs,
         interestGhs: tx.interestGhs,
+        interestRatePercent: tx.interestRatePercent ?? 5,
         interestCollectedUpfront: tx.interestCollectedUpfront ?? false,
         totalOwedGhs: tx.totalOwedGhs,
         issuedByName: "BESTBRYT VENTURES Staff",
@@ -165,6 +166,7 @@ export default function TransactionDetailPage() {
         branchName: branch?.name ?? "BESTBRYT VENTURES",
         fuelAmountGhs: tx.fuelAmountGhs,
         interestGhs: tx.interestGhs,
+        interestRatePercent: tx.interestRatePercent ?? 5,
         totalOwedGhs: tx.totalOwedGhs,
         penaltyGhs: tx.livePenalty,
         liveTotal: tx.liveTotal,
@@ -299,7 +301,7 @@ export default function TransactionDetailPage() {
           <Row icon={<Fuel className="w-4 h-4" />} label="Fuel Principal" value={`GHS ${fmt(tx.fuelAmountGhs)}`} />
           <Row
             icon={<TrendingUp className="w-4 h-4" />}
-            label={tx.interestCollectedUpfront ? "Interest (5%) — collected upfront" : "Interest (5%)"}
+            label={tx.interestCollectedUpfront ? `Interest (${tx.interestRatePercent ?? 5}%) — collected upfront` : `Interest (${tx.interestRatePercent ?? 5}%)`}
             value={`GHS ${fmt(tx.interestGhs)}`}
             className={tx.interestCollectedUpfront ? "line-through text-muted-foreground" : "text-amber-600 dark:text-amber-400"}
           />
@@ -669,7 +671,7 @@ export default function TransactionDetailPage() {
               )}
               {!tx.interestCollectedUpfront && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Interest (5%)</span>
+                  <span className="text-muted-foreground">Interest ({tx.interestRatePercent ?? 5}%)</span>
                   <span className="font-medium text-amber-600 dark:text-amber-400">GHS {fmt(tx.interestGhs)}</span>
                 </div>
               )}
