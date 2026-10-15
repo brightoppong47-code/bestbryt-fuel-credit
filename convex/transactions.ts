@@ -1,3 +1,4 @@
+import { isBranchStaff, assertDriverAccess, assertTransactionAccess, accessibleDriverIds } from "./helpers";
 import { penaltyDays } from "./lib/penaltyDays";
 import { allocatePayment } from "./lib/paymentAllocation";
 import { ConvexError, v } from "convex/values";
@@ -36,20 +37,20 @@ export const issueCredit = mutation({
       throw new ConvexError({ message: "Amount must be greater than 0", code: "BAD_REQUEST" });
     }
 
-    const driver = await ctx.db.get(args.driverId);
+    const driver = await assertDriverAccess(ctx, user, args.driverId);
     if (!driver || !driver.isActive) {
       throw new ConvexError({ message: "Driver not found or inactive", code: "NOT_FOUND" });
     }
 
     // Branch secretaries can only issue credits to drivers in their assigned branch
-    if (user.role === "branch_secretary" && user.branchId) {
+    if (isBranchStaff(user)) {
       if (driver.branchId !== user.branchId) {
         throw new ConvexError({ message: "You can only issue credits to drivers in your assigned branch", code: "FORBIDDEN" });
       }
     }
 
     // Branch secretaries: block if customer has not paid at least 70% of their arrears
-    if (user.role === "branch_secretary") {
+    if (isBranchStaff(user)) {
       const openTxs = await ctx.db
         .query("transactions")
         .withIndex("by_driver", (q) => q.eq("driverId", args.driverId))
@@ -120,6 +121,7 @@ export const markPaid = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireStaff(ctx);
+    await assertTransactionAccess(ctx, user, args.transactionId);
     const tx = await ctx.db.get(args.transactionId);
     if (!tx) throw new ConvexError({ message: "Transaction not found", code: "NOT_FOUND" });
     if (tx.status === "paid") throw new ConvexError({ message: "Already paid", code: "CONFLICT" });
@@ -167,6 +169,7 @@ export const recordPayment = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireStaff(ctx);
+    await assertTransactionAccess(ctx, user, args.transactionId);
     const tx = await ctx.db.get(args.transactionId);
     if (!tx) throw new ConvexError({ message: "Transaction not found", code: "NOT_FOUND" });
     if (tx.status === "paid") throw new ConvexError({ message: "Transaction already fully paid", code: "CONFLICT" });
@@ -220,7 +223,8 @@ export const recordPayment = mutation({
 export const getPayments = query({
   args: { transactionId: v.id("transactions") },
   handler: async (ctx, args) => {
-    await requireStaff(ctx);
+    const user = await requireStaff(ctx);
+    await assertTransactionAccess(ctx, user, args.transactionId);
     const payments = await ctx.db
       .query("payments")
       .withIndex("by_transaction", (q) => q.eq("transactionId", args.transactionId))
@@ -239,7 +243,8 @@ export const getPayments = query({
 export const refreshPenalties = mutation({
   args: { transactionId: v.id("transactions") },
   handler: async (ctx, args) => {
-    await requireStaff(ctx);
+    const user = await requireStaff(ctx);
+    await assertTransactionAccess(ctx, user, args.transactionId);
     const tx = await ctx.db.get(args.transactionId);
     if (!tx || tx.status === "paid") return;
 
@@ -270,12 +275,13 @@ export const listTransactions = query({
     const user = await requireStaff(ctx);
 
     // Branch secretaries are scoped to their branch's drivers
-    const isBranchSecretary = user.role === "branch_secretary" && !!user.branchId;
+    const isBranchSecretary = isBranchStaff(user) && !!user.branchId;
 
-    if (user.role === "branch_secretary" && (!user.branchId || (args.branchId && args.branchId !== user.branchId))) {
+    if (isBranchStaff(user) && (!user.branchId || (args.branchId && args.branchId !== user.branchId))) {
       return { page: [], isDone: true, continueCursor: "" };
     }
     const selectedBranch = isBranchSecretary ? user.branchId : args.branchId;
+    if (args.driverId) await assertDriverAccess(ctx, user, args.driverId);
     let q;
     if (args.driverId) {
       // If branch secretary, verify this driver belongs to their branch
@@ -337,7 +343,8 @@ export const listTransactions = query({
 export const getTransaction = query({
   args: { transactionId: v.id("transactions") },
   handler: async (ctx, args) => {
-    await requireStaff(ctx);
+    const user = await requireStaff(ctx);
+    await assertTransactionAccess(ctx, user, args.transactionId);
     const tx = await ctx.db.get(args.transactionId);
     if (!tx) return null;
     const driver = await ctx.db.get(tx.driverId);
@@ -371,7 +378,8 @@ export const getDriverBalance = query({
     overdueCount: number;
     paidCount: number;
   }> => {
-    await requireStaff(ctx);
+    const user = await requireStaff(ctx);
+    await assertDriverAccess(ctx, user, args.driverId);
     const txs = await ctx.db
       .query("transactions")
       .withIndex("by_driver", (q) => q.eq("driverId", args.driverId))
@@ -412,7 +420,8 @@ export const getDashboardStats = query({
     creditsTodayGhs: number;
     pendingCount: number;
   }> => {
-    await requireStaff(ctx);
+    const user = await requireStaff(ctx);
+    const allowedDrivers = await accessibleDriverIds(ctx, user);
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
@@ -420,7 +429,7 @@ export const getDashboardStats = query({
     // All open (non-paid) transactions
     const pending = await ctx.db.query("transactions").withIndex("by_status", (q) => q.eq("status", "pending")).collect();
     const overdue = await ctx.db.query("transactions").withIndex("by_status", (q) => q.eq("status", "overdue")).collect();
-    const open = [...pending, ...overdue];
+    const open = [...pending, ...overdue].filter(tx => !allowedDrivers || allowedDrivers.has(tx.driverId));
 
     let totalOutstandingGhs = 0;
     let overdueCount = 0;
@@ -434,11 +443,11 @@ export const getDashboardStats = query({
 
     // Active drivers
     const drivers = await ctx.db.query("drivers").collect();
-    const activeDrivers = drivers.filter((d) => d.isActive).length;
+    const activeDrivers = drivers.filter((d) => d.isActive && (!allowedDrivers || allowedDrivers.has(d._id))).length;
 
     // Credits issued today
     const allTxs = await ctx.db.query("transactions").withIndex("by_issued_at").order("desc").take(200);
-    const todayTxs = allTxs.filter((tx) => tx.issuedAt >= todayStart && tx.issuedAt < todayEnd);
+    const todayTxs = allTxs.filter((tx) => (!allowedDrivers || allowedDrivers.has(tx.driverId)) && tx.issuedAt >= todayStart && tx.issuedAt < todayEnd);
 
     return {
       totalOutstandingGhs: Math.round(totalOutstandingGhs * 100) / 100,
@@ -446,7 +455,7 @@ export const getDashboardStats = query({
       activeDrivers,
       creditsTodayCount: todayTxs.length,
       creditsTodayGhs: Math.round(todayTxs.reduce((s, tx) => s + tx.fuelAmountGhs, 0) * 100) / 100,
-      pendingCount: pending.length,
+      pendingCount: pending.filter(tx => !allowedDrivers || allowedDrivers.has(tx.driverId)).length,
     };
   },
 });
@@ -460,7 +469,8 @@ export const getDailySummary = query({
     paymentsGhs: number;
     paymentsCount: number;
   }>> => {
-    await requireStaff(ctx);
+    const user = await requireStaff(ctx);
+    const allowedDrivers = await accessibleDriverIds(ctx, user);
     const now = new Date();
     const result: Array<{
       date: string; creditsCount: number; creditsGhs: number;
@@ -474,10 +484,10 @@ export const getDailySummary = query({
       const label = d.toLocaleDateString("en-GH", { month: "short", day: "numeric" });
 
       const txs = await ctx.db.query("transactions").withIndex("by_issued_at").order("asc").collect();
-      const dayTxs = txs.filter((tx) => tx.issuedAt >= dayStart && tx.issuedAt < dayEnd);
+      const dayTxs = txs.filter((tx) => (!allowedDrivers || allowedDrivers.has(tx.driverId)) && tx.issuedAt >= dayStart && tx.issuedAt < dayEnd);
 
       const payments = await ctx.db.query("payments").withIndex("by_transaction").order("asc").collect();
-      const dayPayments = payments.filter((p) => p.recordedAt >= dayStart && p.recordedAt < dayEnd);
+      const dayPayments = payments.filter((p) => (!allowedDrivers || allowedDrivers.has(p.driverId)) && p.recordedAt >= dayStart && p.recordedAt < dayEnd);
 
       result.push({
         date: label,
@@ -494,12 +504,13 @@ export const getDailySummary = query({
 export const getOutstandingBalances = query({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
-    await requireStaff(ctx);
+    const user = await requireStaff(ctx);
+    const allowedDrivers = await accessibleDriverIds(ctx, user);
     const now = new Date();
 
     const pending = await ctx.db.query("transactions").withIndex("by_status", (q) => q.eq("status", "pending")).collect();
     const overdue = await ctx.db.query("transactions").withIndex("by_status", (q) => q.eq("status", "overdue")).collect();
-    const open = [...overdue, ...pending]; // overdue first
+    const open = [...overdue, ...pending].filter(tx => !allowedDrivers || allowedDrivers.has(tx.driverId)); // overdue first
 
     const enriched = await Promise.all(open.map(async (tx) => {
       const driver = await ctx.db.get(tx.driverId);
@@ -543,7 +554,8 @@ export const getOutstandingBalances = query({
 export const getOverdueAlerts = query({
   args: {},
   handler: async (ctx) => {
-    await requireRiskManagerOrOwner(ctx);
+    const user = await requireRiskManagerOrOwner(ctx);
+    const allowedDrivers = await accessibleDriverIds(ctx, user);
     const now = new Date();
     const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -555,7 +567,7 @@ export const getOverdueAlerts = query({
       .query("transactions")
       .withIndex("by_status", (q) => q.eq("status", "overdue"))
       .collect();
-    const open = [...pending, ...overdue];
+    const open = [...pending, ...overdue].filter(tx => !allowedDrivers || allowedDrivers.has(tx.driverId));
 
     const alerts = [];
     for (const tx of open) {
@@ -599,6 +611,7 @@ export const setPenaltyPause = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireRiskManagerOrOwner(ctx);
+    await assertTransactionAccess(ctx, user, args.transactionId);
     const tx = await ctx.db.get(args.transactionId);
     if (!tx) throw new ConvexError({ message: "Transaction not found", code: "NOT_FOUND" });
     if (tx.status === "paid") {
@@ -623,7 +636,8 @@ export const setPenaltyPause = mutation({
 export const clearPenaltyPause = mutation({
   args: { transactionId: v.id("transactions") },
   handler: async (ctx, args) => {
-    await requireRiskManagerOrOwner(ctx);
+    const user = await requireRiskManagerOrOwner(ctx);
+    await assertTransactionAccess(ctx, user, args.transactionId);
     const tx = await ctx.db.get(args.transactionId);
     if (!tx) throw new ConvexError({ message: "Transaction not found", code: "NOT_FOUND" });
     await ctx.db.patch(args.transactionId, {
