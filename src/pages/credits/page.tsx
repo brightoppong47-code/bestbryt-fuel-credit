@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { usePaginatedQuery } from "convex/react";
+import { usePaginatedQuery, useQuery } from "convex/react";
+import type { Id } from "@/convex/_generated/dataModel";
 import { api } from "@/convex/_generated/api.js";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button.tsx";
@@ -16,12 +17,10 @@ import {
 
 type FilterStatus = "all" | "pending" | "overdue" | "paid";
 
-function TransactionList({ status }: { status: FilterStatus }) {
+function TransactionList({ status, branchId }: { status: FilterStatus; branchId?: Id<"branches"> }) {
   const { results, loadMore, status: qStatus } = usePaginatedQuery(
     api.transactions.listTransactions,
-    status === "all"
-      ? {}
-      : { status: status as "pending" | "overdue" | "paid" },
+    { branchId, status: status === "all" ? undefined : status },
     { initialNumItems: 20 }
   );
 
@@ -40,7 +39,7 @@ function TransactionList({ status }: { status: FilterStatus }) {
           <EmptyMedia variant="icon"><Fuel /></EmptyMedia>
           <EmptyTitle>No {status === "all" ? "" : status} credits</EmptyTitle>
           <EmptyDescription>
-            {status === "all" ? "Issue your first fuel credit to get started." : `No ${status} transactions.`}
+            {branchId ? "No credits match this branch and status." : status === "all" ? "Issue your first fuel credit to get started." : `No ${status} transactions.`}
           </EmptyDescription>
         </EmptyHeader>
         {status === "all" && (
@@ -94,6 +93,10 @@ function TransactionList({ status }: { status: FilterStatus }) {
 }
 
 export default function CreditsPage() {
+  const user = useQuery(api.users.getCurrentUserData);
+  const branches = useQuery(api.branches.listBranches);
+  const settings = useQuery(api.appSettings.getAppSettings);
+  const [branchId, setBranchId] = useState<Id<"branches"> | undefined>();
   const [tab, setTab] = useState<FilterStatus>("all");
 
   return (
@@ -108,6 +111,15 @@ export default function CreditsPage() {
         </Button>
       </div>
 
+      {user?.role === "owner" && <div className="space-y-2 max-w-sm">
+        <label htmlFor="branch-filter" className="text-sm font-medium">Branch</label>
+        <select disabled={!settings?.branchFilteringEnabled} id="branch-filter" className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={branchId ?? ""} onChange={e => setBranchId((e.target.value || undefined) as Id<"branches"> | undefined)}>
+          <option value="">All branches</option>
+          {branches?.slice().sort((a,b) => a.name.localeCompare(b.name)).map(branch => <option key={branch._id} value={branch._id}>{branch.name}{branch.isActive ? "" : " (inactive)"}</option>)}
+        </select>
+        {settings && !settings.branchFilteringEnabled && <p className="text-xs text-muted-foreground">Branch filtering will be available after the backend update is deployed.</p>}
+      </div>}
+
       <Tabs value={tab} onValueChange={(v) => setTab(v as FilterStatus)}>
         <TabsList className="w-full sm:w-auto">
           <TabsTrigger value="all">All</TabsTrigger>
@@ -116,7 +128,7 @@ export default function CreditsPage() {
           <TabsTrigger value="paid">Paid</TabsTrigger>
         </TabsList>
         <TabsContent value={tab} className="mt-4">
-          <TransactionList status={tab} />
+          <TransactionList key={`${tab}-${branchId ?? "all"}`} status={tab} branchId={branchId} />
         </TabsContent>
       </Tabs>
     </div>
