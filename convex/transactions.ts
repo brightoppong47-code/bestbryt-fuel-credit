@@ -262,6 +262,7 @@ export const refreshPenalties = mutation({
 export const listTransactions = query({
   args: {
     paginationOpts: paginationOptsValidator,
+    branchId: v.optional(v.id("branches")),
     driverId: v.optional(v.id("drivers")),
     status: v.optional(v.union(v.literal("pending"), v.literal("paid"), v.literal("overdue"))),
   },
@@ -271,6 +272,10 @@ export const listTransactions = query({
     // Branch secretaries are scoped to their branch's drivers
     const isBranchSecretary = user.role === "branch_secretary" && !!user.branchId;
 
+    if (user.role === "branch_secretary" && (!user.branchId || (args.branchId && args.branchId !== user.branchId))) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+    const selectedBranch = isBranchSecretary ? user.branchId : args.branchId;
     let q;
     if (args.driverId) {
       // If branch secretary, verify this driver belongs to their branch
@@ -287,6 +292,11 @@ export const listTransactions = query({
       q = ctx.db.query("transactions").withIndex("by_issued_at");
     }
 
+    if (selectedBranch) {
+      const drivers = await ctx.db.query("drivers").withIndex("by_branch", qi => qi.eq("branchId", selectedBranch)).collect();
+      if (!drivers.length) return { page: [], isDone: true, continueCursor: "" };
+      q = q.filter(qi => qi.or(...drivers.map(driver => qi.eq(qi.field("driverId"), driver._id))));
+    }
     const result = await q.order("desc").paginate(args.paginationOpts);
 
     // Enrich with driver info (and filter for branch secretaries)
