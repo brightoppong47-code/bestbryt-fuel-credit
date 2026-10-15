@@ -1,3 +1,4 @@
+import { isBranchStaff, canAccessBranch, assertBranchAccess, assertDriverAccess } from "./helpers";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireStaff } from "./helpers";
@@ -40,7 +41,7 @@ export const registerDriver = mutation({
     if (!branch) throw new ConvexError({ message: "Branch not found", code: "NOT_FOUND" });
 
     // Branch secretaries can only register drivers in their own branch
-    if (user.role === "branch_secretary" && user.branchId && user.branchId !== args.branchId) {
+    if (!canAccessBranch(user, args.branchId)) {
       throw new ConvexError({ message: "You can only register drivers in your assigned branch", code: "FORBIDDEN" });
     }
 
@@ -92,8 +93,10 @@ export const updateDriver = mutation({
     isActive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    await requireStaff(ctx);
+    const user = await requireStaff(ctx);
+    await assertDriverAccess(ctx, user, args.driverId);
     const { driverId, ...updates } = args;
+    if (updates.branchId) assertBranchAccess(user, updates.branchId);
     // Validate branch if changing
     if (updates.branchId) {
       const branch = await ctx.db.get(updates.branchId);
@@ -109,10 +112,10 @@ export const listDrivers = query({
     const user = await requireStaff(ctx);
 
     // Branch secretaries only see drivers in their assigned branch
-    if (user.role === "branch_secretary" && (!user.branchId || (args.branchId && args.branchId !== user.branchId))) {
+    if (isBranchStaff(user) && (!user.branchId || (args.branchId && args.branchId !== user.branchId))) {
       return { page: [], isDone: true, continueCursor: "" };
     }
-    const branchId = user.role === "branch_secretary" ? user.branchId : args.branchId;
+    const branchId = isBranchStaff(user) ? user.branchId : args.branchId;
 
     let result;
     if (branchId) {
@@ -146,8 +149,9 @@ export const listDrivers = query({
 export const getDriver = query({
   args: { driverId: v.id("drivers") },
   handler: async (ctx, args) => {
-    await requireStaff(ctx);
+    const user = await requireStaff(ctx);
     const driver = await ctx.db.get(args.driverId);
+    if (driver && !canAccessBranch(user, driver.branchId)) return null;
     if (!driver) return null;
     const photoUrl = driver.photoStorageId
       ? await ctx.storage.getUrl(driver.photoStorageId)
