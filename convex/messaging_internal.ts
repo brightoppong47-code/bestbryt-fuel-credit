@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internalQuery, internalMutation, query } from "./_generated/server";
-import { requireOwner } from "./helpers.ts";
+import { requireStaff, assertTransactionAccess, requireOwner } from "./helpers.ts";
 
 // ─── Internal query: get transaction data for composing a message ─────────────
 
@@ -82,6 +82,8 @@ export const logMessage = internalMutation({
 export const getMessageLogs = query({
   args: { transactionId: v.id("transactions") },
   handler: async (ctx, args) => {
+    const user = await requireStaff(ctx);
+    await assertTransactionAccess(ctx, user, args.transactionId);
     return await ctx.db
       .query("message_logs")
       .withIndex("by_transaction", (q) => q.eq("transactionId", args.transactionId))
