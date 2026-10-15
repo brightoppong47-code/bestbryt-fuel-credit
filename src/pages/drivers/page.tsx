@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { usePaginatedQuery } from "convex/react";
+import { usePaginatedQuery, useQuery } from "convex/react";
+import type { Id } from "@/convex/_generated/dataModel";
 import { api } from "@/convex/_generated/api.js";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button.tsx";
@@ -11,12 +12,16 @@ import { Users, Plus, Search, Phone, Car, MapPin, Hash } from "lucide-react";
 import { useDebounce } from "@/hooks/use-debounce.ts";
 
 export default function DriversPage() {
+  const user = useQuery(api.users.getCurrentUserData);
+  const branches = useQuery(api.branches.listBranches);
+  const settings = useQuery(api.appSettings.getAppSettings);
+  const [branchId, setBranchId] = useState<Id<"branches"> | undefined>();
   const [searchInput, setSearchInput] = useState("");
   const [search] = useDebounce(searchInput, 300);
 
   const { results, status, loadMore } = usePaginatedQuery(
     api.drivers.listDrivers,
-    { search: search || undefined },
+    { search: search || undefined, branchId },
     { initialNumItems: 20 }
   );
 
@@ -35,6 +40,15 @@ export default function DriversPage() {
           </Link>
         </Button>
       </div>
+
+      {user?.role === "owner" && <div className="space-y-2 max-w-sm">
+        <label htmlFor="branch-filter" className="text-sm font-medium">Branch</label>
+        <select disabled={!settings?.branchFilteringEnabled} id="branch-filter" className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={branchId ?? ""} onChange={e => setBranchId((e.target.value || undefined) as Id<"branches"> | undefined)}>
+          <option value="">All branches</option>
+          {branches?.slice().sort((a,b) => a.name.localeCompare(b.name)).map(branch => <option key={branch._id} value={branch._id}>{branch.name}{branch.isActive ? "" : " (inactive)"}</option>)}
+        </select>
+        {settings && !settings.branchFilteringEnabled && <p className="text-xs text-muted-foreground">Branch filtering will be available after the backend update is deployed.</p>}
+      </div>}
 
       {/* Search */}
       <div className="relative">
@@ -63,7 +77,7 @@ export default function DriversPage() {
             <EmptyMedia variant="icon"><Users /></EmptyMedia>
             <EmptyTitle>No drivers found</EmptyTitle>
             <EmptyDescription>
-              {search ? "No drivers match your search." : "Register your first commercial driver to get started."}
+              {branchId ? "No drivers match this branch and search." : search ? "No drivers match your search." : "Register your first commercial driver to get started."}
             </EmptyDescription>
           </EmptyHeader>
           {!search && (
