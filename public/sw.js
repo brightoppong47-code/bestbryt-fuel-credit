@@ -1,6 +1,6 @@
 // Bump this version on every publish — it signals existing installs to update.
 const CACHE_PREFIX = `bbv-${new URL(self.registration.scope).pathname}-`;
-const CACHE_NAME = `${CACHE_PREFIX}assets-v9`;
+const CACHE_NAME = `${CACHE_PREFIX}assets-v10`;
 const OFFLINE_URL = new URL("offline.html", self.registration.scope).href;
 
 // Static assets to pre-cache on install
