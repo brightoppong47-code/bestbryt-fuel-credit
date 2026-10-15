@@ -1,3 +1,4 @@
+import { assertBranchAccess, canAccessBranch } from "./helpers";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getCurrentUser } from "./helpers";
@@ -13,6 +14,7 @@ export const getTodayStats = query({
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
+    assertBranchAccess(user, args.branchId);
     if (user.role !== "branch_secretary" && user.role !== "owner") {
       throw new ConvexError({ message: "Access denied", code: "FORBIDDEN" });
     }
@@ -113,6 +115,7 @@ export const checkEodSubmitted = query({
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
+    assertBranchAccess(user, args.branchId);
     if (user.role !== "branch_secretary" && user.role !== "owner") return null;
     return await ctx.db
       .query("eod_reports")
@@ -138,6 +141,7 @@ export const submitEodReport = mutation({
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
+    assertBranchAccess(user, args.branchId);
     if (user.role !== "branch_secretary" && user.role !== "owner") {
       throw new ConvexError({ message: "Only branch secretaries can submit EOD reports", code: "FORBIDDEN" });
     }
@@ -206,7 +210,7 @@ export const listEodReports = query({
       .take(args.limitDays ? args.limitDays * 10 : 100);
 
     return Promise.all(
-      reports.map(async (r) => {
+      reports.filter(r => canAccessBranch(user, r.branchId)).map(async (r) => {
         const branch = await ctx.db.get(r.branchId);
         const submitter = await ctx.db.get(r.submittedBy);
         return {
