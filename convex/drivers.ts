@@ -104,12 +104,15 @@ export const updateDriver = mutation({
 });
 
 export const listDrivers = query({
-  args: { paginationOpts: paginationOptsValidator, search: v.optional(v.string()) },
+  args: { paginationOpts: paginationOptsValidator, search: v.optional(v.string()), branchId: v.optional(v.id("branches")) },
   handler: async (ctx, args) => {
     const user = await requireStaff(ctx);
 
     // Branch secretaries only see drivers in their assigned branch
-    const branchId = (user.role === "branch_secretary" && user.branchId) ? user.branchId : null;
+    if (user.role === "branch_secretary" && (!user.branchId || (args.branchId && args.branchId !== user.branchId))) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+    const branchId = user.role === "branch_secretary" ? user.branchId : args.branchId;
 
     let result;
     if (branchId) {
