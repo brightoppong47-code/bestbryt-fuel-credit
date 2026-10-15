@@ -3,7 +3,7 @@
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { internalAction, action } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { internal, api } from "./_generated/api";
 import Twilio from "twilio";
 
 // ─── Twilio helpers ───────────────────────────────────────────────────────────
@@ -81,6 +81,7 @@ export const sendTransactionAlert = action({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
 
+    await ctx.runQuery(api.transactions.getPayments, {transactionId: args.transactionId});
     const data = await ctx.runQuery(internal.messaging_internal.getTransactionForMessage, {
       transactionId: args.transactionId,
     });
@@ -129,6 +130,8 @@ export const sendBroadcast = action({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
 
+    const user = await ctx.runQuery(api.users.getCurrentUserData, {});
+    if (!user || user.role !== "owner") throw new ConvexError({message:"Only admin can send broadcasts",code:"FORBIDDEN"});
     const drivers = await ctx.runQuery(internal.messaging_internal.getActiveDriversForBroadcast, {
       branchId: args.branchId,
     });
