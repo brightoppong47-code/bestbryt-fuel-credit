@@ -224,7 +224,7 @@ function AssignRoleDialog({
       await updateRole({
         userId,
         role: selectedRole,
-        branchId: selectedRole === "branch_secretary" && selectedBranch !== "none"
+        branchId: (selectedRole !== "owner") && selectedBranch !== "none"
           ? selectedBranch as Id<"branches">
           : undefined,
       });
@@ -238,7 +238,7 @@ function AssignRoleDialog({
   };
 
   const unchanged = selectedRole === currentRole &&
-    (selectedRole !== "branch_secretary" || selectedBranch === (currentBranchId ?? "none"));
+    (selectedRole === "owner" || selectedBranch === (currentBranchId ?? "none"));
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -256,7 +256,7 @@ function AssignRoleDialog({
               </SelectContent>
             </Select>
           </div>
-          {selectedRole === "branch_secretary" && (
+          {(selectedRole !== "owner") && (
             <div className="space-y-1.5">
               <Label>Assigned Branch *</Label>
               <Select value={selectedBranch} onValueChange={setSelectedBranch}>
@@ -268,7 +268,7 @@ function AssignRoleDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">The branch this secretary will manage and submit EOD reports for.</p>
+              <p className="text-xs text-muted-foreground">This user can only view and record customer data in the selected branch.</p>
             </div>
           )}
           <RoleHint role={selectedRole} />
@@ -405,7 +405,7 @@ function CreateUserDialog({ open, onClose }: { open: boolean; onClose: () => voi
 function RoleHint({ role }: { role: Role }) {
   const hints: Record<Role, string> = {
     owner: "Full access — manage branches, team roles, all data and reports.",
-    staff: "Register drivers, issue fuel credits, record payments, view reports.",
+    staff: "View and register customers, issue fuel credits, record payments and view reports in their assigned branch only.",
     branch_secretary: "Register drivers, issue fuel credits, record payments.",
     risk_manager: "View overdue alerts (3+ days), call drivers, register and deactivate drivers.",
   };
@@ -663,7 +663,7 @@ export default function SettingsPage() {
                   <RoleBadge role={role} />
                   <p className="text-muted-foreground text-xs leading-relaxed pt-0.5">
                     {role === "owner" && "Full access — manage branches, team roles, all data, and reports."}
-                    {role === "staff" && "Register drivers, issue fuel credits, record payments, view reports."}
+                    {role === "staff" && "View and register customers, issue fuel credits, record payments and view reports in their assigned branch only."}
                     {role === "branch_secretary" && "Register and view drivers within their assigned branch only. Issue credits to their branch's drivers, record payments, submit EOD reports."}
                     {role === "risk_manager" && "View overdue alerts (3+ days), call drivers, register and deactivate drivers."}
                   </p>
