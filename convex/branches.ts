@@ -1,3 +1,4 @@
+import { canAccessBranch } from "./helpers";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireOwner, requireStaff } from "./helpers";
@@ -37,16 +38,16 @@ export const createBranch = mutation({
 export const listBranches = query({
   args: {},
   handler: async (ctx) => {
-    await requireStaff(ctx);
-    return await ctx.db.query("branches").collect();
+    const user = await requireStaff(ctx);
+    return (await ctx.db.query("branches").collect()).filter(branch => canAccessBranch(user, branch._id));
   },
 });
 
 export const getBranch = query({
   args: { branchId: v.id("branches") },
   handler: async (ctx, args) => {
-    await requireStaff(ctx);
-    return await ctx.db.get(args.branchId);
+    const user = await requireStaff(ctx);
+    return canAccessBranch(user, args.branchId) ? await ctx.db.get(args.branchId) : null;
   },
 });
 
