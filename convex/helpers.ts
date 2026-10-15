@@ -45,3 +45,34 @@ export async function requireRiskManagerOrOwner(ctx: QueryCtx | MutationCtx) {
   }
   return user;
 }
+
+import type { Doc, Id } from "./_generated/dataModel";
+/** All non-admin staff are always branch-scoped, including when unassigned. */
+export function isBranchStaff(user: Doc<"users">) {
+  return user.role !== "owner";
+}
+export function canAccessBranch(user: Doc<"users">, branchId: Id<"branches"> | undefined) {
+  return !isBranchStaff(user) || (!!user.branchId && user.branchId === branchId);
+}
+export function assertBranchAccess(user: Doc<"users">, branchId: Id<"branches"> | undefined) {
+  if (!canAccessBranch(user, branchId)) throw new ConvexError({message:"Access is restricted to your assigned branch. Ask admin to assign your branch if needed.",code:"FORBIDDEN"});
+}
+export async function assertDriverAccess(ctx: QueryCtx | MutationCtx, user: Doc<"users">, driverId: Id<"drivers">) {
+  const driver = await ctx.db.get(driverId);
+  if (!driver) throw new ConvexError({message:"Customer not found",code:"NOT_FOUND"});
+  assertBranchAccess(user, driver.branchId);
+  return driver;
+}
+export async function assertTransactionAccess(ctx: QueryCtx | MutationCtx, user: Doc<"users">, transactionId: Id<"transactions">) {
+  const tx = await ctx.db.get(transactionId);
+  if (!tx) throw new ConvexError({message:"Credit not found",code:"NOT_FOUND"});
+  await assertDriverAccess(ctx, user, tx.driverId);
+  return tx;
+}
+export async function accessibleDriverIds(ctx: QueryCtx | MutationCtx, user: Doc<"users">) {
+  if (!isBranchStaff(user)) return null;
+  if (!user.branchId) return new Set<Id<"drivers">>();
+  const branchId=user.branchId;
+  const drivers=await ctx.db.query("drivers").withIndex("by_branch",q=>q.eq("branchId",branchId)).collect();
+  return new Set(drivers.map(d=>d._id));
+}
