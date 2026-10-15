@@ -113,6 +113,7 @@ export const updateUserRole = mutation({
         code: "FORBIDDEN",
       });
     }
+    if (args.branchId && !await ctx.db.get(args.branchId)) throw new ConvexError({message:"Branch not found",code:"NOT_FOUND"});
     await ctx.db.patch(args.userId, {
       role: args.role,
       branchId: args.branchId,
