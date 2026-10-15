@@ -133,6 +133,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
 }
 
 function AppLayout() {
+  const currentUser = useQuery(api.users.getCurrentUserData);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { settings } = useAppAppearance();
   // Logo from Convex for cross-device sync
@@ -181,7 +182,9 @@ function AppLayout() {
         </header>
 
         <main className="flex-1 overflow-auto">
-          <Outlet />
+          {!currentUser ? <p className="p-6">Loading account…</p> : currentUser.role !== "owner" && !currentUser.branchId
+            ? <div className="p-6"><h1 className="text-xl font-bold">Branch assignment required</h1><p className="mt-2 text-muted-foreground">Ask admin to assign your branch before viewing or recording customer data.</p></div>
+            : <Outlet />}
         </main>
       </div>
     </div>
