@@ -1,3 +1,4 @@
+import { isBranchStaff, accessibleDriverIds } from "./helpers";
 import { penaltyDays } from "./lib/penaltyDays";
 import { v } from "convex/values";
 import { query } from "./_generated/server";
@@ -29,7 +30,8 @@ export const getAllTransactionsForExport = query({
     toDate: v.optional(v.string()),   // YYYY-MM-DD (inclusive)
   },
   handler: async (ctx, args) => {
-    await requireStaff(ctx);
+    const user = await requireStaff(ctx);
+    const allowedDrivers = await accessibleDriverIds(ctx, user);
     const now = new Date();
 
     // Fetch by status index when filtered, else scan all via issuedAt index
@@ -47,6 +49,7 @@ export const getAllTransactionsForExport = query({
         .collect();
     }
 
+    txs = txs.filter(tx => !allowedDrivers || allowedDrivers.has(tx.driverId));
     // Date range filter
     if (args.fromDate || args.toDate) {
       const from = args.fromDate ? args.fromDate : null;
@@ -111,7 +114,8 @@ export const getAllDriversForExport = query({
     activeOnly: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    await requireStaff(ctx);
+    const user = await requireStaff(ctx);
+    const allowedDrivers = await accessibleDriverIds(ctx, user);
     const now = new Date();
 
     let drivers;
@@ -128,6 +132,7 @@ export const getAllDriversForExport = query({
       drivers = drivers.filter((d) => d.isActive);
     }
 
+    drivers = drivers.filter(d => !allowedDrivers || allowedDrivers.has(d._id));
     const rows = await Promise.all(
       drivers.map(async (d) => {
         const branch = await ctx.db.get(d.branchId);
@@ -191,13 +196,15 @@ export const getAllPaymentsForExport = query({
     toDate: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireStaff(ctx);
+    const user = await requireStaff(ctx);
+    const allowedDrivers = await accessibleDriverIds(ctx, user);
 
     let payments = await ctx.db
       .query("payments")
       .order("desc")
       .collect();
 
+    payments = payments.filter(p => !allowedDrivers || allowedDrivers.has(p.driverId));
     if (args.fromDate || args.toDate) {
       payments = payments.filter((p) => {
         const d = p.recordedAt.slice(0, 10);
@@ -241,10 +248,10 @@ export const collections = query({
     if (!validDate(args.fromDate) || !validDate(args.toDate) || args.fromDate > args.toDate) {
       throw new Error("Choose a valid date range");
     }
-    if (user.role === "branch_secretary" && (!user.branchId || (args.branchId && args.branchId !== user.branchId))) {
+    if (isBranchStaff(user) && (!user.branchId || (args.branchId && args.branchId !== user.branchId))) {
       throw new Error("You can only report on your assigned branch");
     }
-    const branchId = user.role === "branch_secretary" ? user.branchId : args.branchId;
+    const branchId = isBranchStaff(user) ? user.branchId : args.branchId;
     const [transactions, payments, drivers, branches] = await Promise.all([
       ctx.db.query("transactions").collect(), ctx.db.query("payments").collect(),
       ctx.db.query("drivers").collect(), ctx.db.query("branches").collect(),
