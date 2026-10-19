@@ -4,6 +4,8 @@ import { api } from "@/convex/_generated/api.js";
 import { SignInButton } from "@/components/ui/signin.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { useAuth } from "@/hooks/use-auth.ts";
+import { useAuthActions, useConvexAuth as usePasswordAuth } from "@convex-dev/auth/react";
+import { PasswordSignIn } from "@/components/PasswordSignIn";
 import { useAppAppearance } from "@/hooks/use-app-appearance.ts";
 import {
   LayoutDashboard,
@@ -55,7 +57,10 @@ const ROLE_LABELS: Record<Role, string> = {
 };
 
 function SidebarContent({ onClose }: { onClose?: () => void }) {
-  const { signout } = useAuth();
+  const { signout: legacySignout, removeUser } = useAuth();
+  const {signOut: passwordSignout}=useAuthActions();
+  const passwordAuth=usePasswordAuth();
+  const signout=async()=>{if(passwordAuth.isAuthenticated) { await removeUser(); await passwordSignout(); } else await legacySignout();};
   const currentUser = useQuery(api.users.getCurrentUserData);
   const navItems = getNavItems(currentUser?.role as Role | undefined);
   const { settings } = useAppAppearance();
@@ -209,7 +214,8 @@ export default function AuthenticatedLayout() {
               <h1 className="text-2xl font-bold">BESTBRYT VENTURES</h1>
               <p className="text-muted-foreground text-sm">Fuel Credit Management System</p>
             </div>
-            <SignInButton />
+            <PasswordSignIn />
+            <SignInButton signInText="Original staff login" />
           </div>
         </div>
       </Unauthenticated>

@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as accountAdmin from "../accountAdmin.js";
+import type * as auth from "../auth.js";
 import type * as admin from "../admin.js";
 import type * as appSettings from "../appSettings.js";
 import type * as branches from "../branches.js";
@@ -16,11 +18,12 @@ import type * as drivers from "../drivers.js";
 import type * as eod from "../eod.js";
 import type * as exports from "../exports.js";
 import type * as helpers from "../helpers.js";
+import type * as lib_paymentAllocation from "../lib/paymentAllocation.js";
 import type * as messaging from "../messaging.js";
 import type * as messaging_internal from "../messaging_internal.js";
 import type * as penalties from "../penalties.js";
-import type * as transactions from "../transactions.js";
 import type * as reports from "../reports.js";
+import type * as transactions from "../transactions.js";
 import type * as users from "../users.js";
 
 import type {
@@ -30,6 +33,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  accountAdmin: typeof accountAdmin;
+  auth: typeof auth;
   admin: typeof admin;
   appSettings: typeof appSettings;
   branches: typeof branches;
@@ -38,11 +43,12 @@ declare const fullApi: ApiFromModules<{
   eod: typeof eod;
   exports: typeof exports;
   helpers: typeof helpers;
+  "lib/paymentAllocation": typeof lib_paymentAllocation;
   messaging: typeof messaging;
   messaging_internal: typeof messaging_internal;
   penalties: typeof penalties;
-  transactions: typeof transactions;
   reports: typeof reports;
+  transactions: typeof transactions;
   users: typeof users;
 }>;
 

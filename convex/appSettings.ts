@@ -18,11 +18,11 @@ export const getAppSettings = query({
       .query("app_settings")
       .withIndex("by_key", (q) => q.eq("key", SETTINGS_KEY))
       .unique();
-    if (!doc) return { logoUrl: null, interestRatePercent: 5, branchFilteringEnabled: true };
+    if (!doc) return { logoUrl: null, interestRatePercent: 5, branchFilteringEnabled: true, accountCreationEnabled: !!process.env.JWT_PRIVATE_KEY && !!process.env.JWKS };
     const logoUrl = doc.logoStorageId
       ? await ctx.storage.getUrl(doc.logoStorageId)
       : null;
-    return { logoUrl, interestRatePercent: doc.interestRatePercent ?? 5, branchFilteringEnabled: true };
+    return { logoUrl, interestRatePercent: doc.interestRatePercent ?? 5, branchFilteringEnabled: true, accountCreationEnabled: !!process.env.JWT_PRIVATE_KEY && !!process.env.JWKS };
   },
 });
 

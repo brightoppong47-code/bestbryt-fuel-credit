@@ -1,5 +1,5 @@
 import { Component, useState, type ReactNode } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
@@ -287,119 +287,33 @@ function AssignRoleDialog({
 
 // ─── Create User (invite) ─────────────────────────────────────────────────────
 
-function CreateUserDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const createInvite = useMutation(api.users.createInvite);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState<Role>("staff");
-  const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(false);
-
-  const reset = () => { setName(""); setEmail(""); setRole("staff"); setDone(false); };
-
-  const handleClose = () => { reset(); onClose(); };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim()) return;
-    setLoading(true);
-    try {
-      await createInvite({
-        email: email.trim(),
-        role,
-        name: name.trim() || undefined,
-      });
-      setDone(true);
-    } catch (err) {
-      toast.error(err instanceof ConvexError ? (err.data as { message: string }).message : "Failed to create user.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <UserPlus className="w-4 h-4" /> Create New User
-          </DialogTitle>
-        </DialogHeader>
-
-        {done ? (
-          <div className="py-4 space-y-4">
-            <div className="rounded-xl bg-primary/10 border border-primary/20 p-4 space-y-2">
-              <div className="flex items-center gap-2 text-primary font-semibold text-sm">
-                <CheckCircle2 className="w-4 h-4" /> User slot created
-              </div>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                <span className="font-medium text-foreground">{email}</span> has been pre-assigned the{" "}
-                <span className="font-medium text-foreground">{ROLE_LABELS[role]}</span> role.
-              </p>
-            </div>
-
-            <div className="rounded-lg bg-muted p-3 space-y-2 text-xs text-muted-foreground">
-              <p className="font-semibold text-foreground text-sm">Next step — create their login:</p>
-              <ol className="space-y-1.5 list-decimal list-inside">
-                <li>Go to the <span className="font-medium text-foreground">Branding</span> tab in the Hercules App Builder sidebar</li>
-                <li>Click <span className="font-medium text-foreground">Auth</span> and select your sign-in method</li>
-                <li>Add the user with email <span className="font-mono font-medium text-foreground">{email}</span></li>
-                <li>Share the login link / credentials with them</li>
-              </ol>
-              <p className="pt-1">When they sign in for the first time, they will automatically be placed in the <span className="font-medium text-foreground">{ROLE_LABELS[role]}</span> role.</p>
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="secondary" onClick={() => setDone(false)}>
-                Add Another
-              </Button>
-              <Button onClick={handleClose}>Done</Button>
-            </DialogFooter>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-            <div className="space-y-1.5">
-              <Label>Full Name <span className="text-muted-foreground font-normal">(optional)</span></Label>
-              <Input
-                placeholder="John Mensah"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Email Address *</Label>
-              <Input
-                type="email"
-                placeholder="john@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Role *</Label>
-              <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {(Object.entries(ROLE_LABELS) as [Role, string][]).map(([r, l]) => (
-                    <SelectItem key={r} value={r}>{l}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <RoleHint role={role} />
-            <DialogFooter>
-              <Button type="button" variant="secondary" onClick={handleClose}>Cancel</Button>
-              <Button type="submit" disabled={loading || !email.trim()} className="gap-2">
-                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                Create User
-              </Button>
-            </DialogFooter>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
+function CreateUserDialog({ open, onClose, initial }: { open: boolean; onClose: () => void; initial?: {email:string;name?:string;role:Role} }) {
+  const createUser=useAction(api.accountAdmin.createUser);
+  const branches=useQuery(api.branches.listBranches);
+  const settings=useQuery(api.appSettings.getAppSettings);
+  const [name,setName]=useState(initial?.name ?? "");
+  const [email,setEmail]=useState(initial?.email ?? "");
+  const [role,setRole]=useState<"staff"|"branch_secretary"|"risk_manager">(initial?.role && initial.role!=="owner" ? initial.role : "staff");
+  const [branchId,setBranchId]=useState("");const [password,setPassword]=useState("");
+  const [loading,setLoading]=useState(false);const [done,setDone]=useState(false);const [error,setError]=useState("");
+  const close=()=>{setPassword("");onClose();};
+  return <Dialog open={open} onOpenChange={o=>{if(!o&&!loading)close();}}><DialogContent><DialogHeader><DialogTitle>Create User Account</DialogTitle></DialogHeader>
+    {done ? <div className="space-y-4 py-4"><p className="font-medium">Account created for {email}.</p><p className="text-sm text-muted-foreground">Share the app link and the password you entered privately with this user. They can sign in using the email and password form. Their role and branch are already assigned.</p><Button onClick={close}>Done</Button></div>
+    : <form className="space-y-4 mt-2" onSubmit={async e=>{
+      e.preventDefault();setLoading(true);setError("");
+      try {await createUser({email,name,password,role,branchId:branchId as Id<"branches">});setPassword("");setDone(true);}
+      catch(err){setError(err instanceof Error ? err.message : "Could not create account");}finally{setLoading(false);}
+    }}>
+      {!settings?.accountCreationEnabled && <p role="alert" className="text-sm text-muted-foreground">Account creation requires the backend authentication update to be activated first.</p>}
+      <div className="space-y-1"><Label htmlFor="new-user-name">Full name</Label><Input id="new-user-name" value={name} onChange={e=>setName(e.target.value)} required disabled={loading}/></div>
+      <div className="space-y-1"><Label htmlFor="new-user-email">Email</Label><Input id="new-user-email" type="email" autoComplete="off" value={email} onChange={e=>setEmail(e.target.value)} required disabled={loading}/></div>
+      <div className="space-y-1"><Label htmlFor="new-user-password">Initial password</Label><Input id="new-user-password" type="password" autoComplete="new-password" minLength={12} maxLength={128} value={password} onChange={e=>setPassword(e.target.value)} required disabled={loading}/><p className="text-xs text-muted-foreground">12–128 characters. Share it privately; the app will not show it again.</p></div>
+      <div className="space-y-1"><Label htmlFor="new-user-role">Role</Label><select id="new-user-role" className="w-full rounded-md border bg-background p-2" value={role} onChange={e=>setRole(e.target.value as typeof role)} disabled={loading}>{["staff","branch_secretary","risk_manager"].map(r=><option key={r} value={r}>{ROLE_LABELS[r as Role]}</option>)}</select></div>
+      <div className="space-y-1"><Label htmlFor="new-user-branch">Assigned branch</Label><select id="new-user-branch" className="w-full rounded-md border bg-background p-2" value={branchId} onChange={e=>setBranchId(e.target.value)} required disabled={loading}><option value="">Choose branch</option>{branches?.filter(b=>b.isActive).map(b=><option key={b._id} value={b._id}>{b.name}</option>)}</select></div>
+      <RoleHint role={role}/>{error&&<p role="alert" className="text-sm text-destructive">{error}</p>}
+      <DialogFooter><Button type="button" variant="secondary" disabled={loading} onClick={close}>Cancel</Button><Button disabled={loading||!settings?.accountCreationEnabled||!branchId||password.length<12}>{loading?"Creating…":"Create account"}</Button></DialogFooter>
+    </form>}
+  </DialogContent></Dialog>;
 }
 
 function RoleHint({ role }: { role: Role }) {
@@ -475,6 +389,7 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("team");
   const [createBranchOpen, setCreateBranchOpen] = useState(false);
   const [createUserOpen, setCreateUserOpen] = useState(false);
+  const [pendingUser,setPendingUser]=useState<{email:string;name?:string;role:Role}|undefined>();
   const [assignRoleTarget, setAssignRoleTarget] = useState<{
     userId: Id<"users">; role: Role; name: string; branchId?: Id<"branches">;
   } | null>(null);
@@ -537,9 +452,7 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
-                  Pre-assign a role to an email. When the user signs in for the first time they will automatically receive their assigned role.
-                  After saving, create their login from the{" "}
-                  <span className="font-medium text-foreground">Branding → Auth</span> tab.
+                  Create an email-and-password account and assign its role and branch. Existing staff can continue using their original login.
                 </p>
 
                 {invites === undefined ? (
@@ -550,8 +463,8 @@ export default function SettingsPage() {
                   <Empty>
                     <EmptyHeader>
                       <EmptyMedia variant="icon"><Mail /></EmptyMedia>
-                      <EmptyTitle>No users created yet</EmptyTitle>
-                      <EmptyDescription>Click "Add User" to pre-assign a role to a new team member.</EmptyDescription>
+                      <EmptyTitle>No pending role reservations</EmptyTitle>
+                      <EmptyDescription>Click "Add User" to create a working login for a new team member.</EmptyDescription>
                     </EmptyHeader>
                     <EmptyContent>
                       <Button size="sm" onClick={() => setCreateUserOpen(true)}>
@@ -581,6 +494,7 @@ export default function SettingsPage() {
                               <Clock className="w-3.5 h-3.5" /> Pending
                             </span>
                           )}
+                          {!invite.acceptedAt && <Button size="sm" variant="secondary" onClick={()=>{setPendingUser({email:invite.email,name:invite.name,role:invite.role as Role});setCreateUserOpen(true);}}>Create login</Button>}
                           {!invite.acceptedAt && (
                             <button
                               onClick={() => handleDeleteInvite(invite._id, invite.email)}
@@ -764,7 +678,7 @@ export default function SettingsPage() {
 
       {/* ── Dialogs ───────────────────────────────────────────────────────── */}
       <CreateBranchDialog open={createBranchOpen} onClose={() => setCreateBranchOpen(false)} />
-      <CreateUserDialog open={createUserOpen} onClose={() => setCreateUserOpen(false)} />
+      {createUserOpen && <CreateUserDialog open={true} initial={pendingUser} onClose={() => {setCreateUserOpen(false);setPendingUser(undefined);}} />}
       {assignRoleTarget && (
         <AssignRoleDialog
           userId={assignRoleTarget.userId}

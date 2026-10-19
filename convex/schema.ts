@@ -1,9 +1,17 @@
+import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+  ...authTables,
   users: defineTable({
     tokenIdentifier: v.string(),
+    loginMethod: v.optional(v.literal("password")),
+    image: v.optional(v.string()),
+    emailVerificationTime: v.optional(v.number()),
+    phone: v.optional(v.string()),
+    phoneVerificationTime: v.optional(v.number()),
+    isAnonymous: v.optional(v.boolean()),
     name: v.optional(v.string()),
     email: v.optional(v.string()),
     role: v.union(
@@ -15,6 +23,8 @@ export default defineSchema({
     // Branch assigned to this user (required for branch_secretary)
     branchId: v.optional(v.id("branches")),
   })
+    .index("email", ["email"])
+    .index("phone", ["phone"])
     .index("by_token", ["tokenIdentifier"])
     .index("by_role", ["role"]),
 

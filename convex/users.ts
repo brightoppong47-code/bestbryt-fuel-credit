@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { getCurrentUser } from "./helpers";
+import { getCurrentUser, findCurrentUser } from "./helpers";
 
 type Role = "owner" | "staff" | "branch_secretary" | "risk_manager";
 
@@ -10,11 +10,9 @@ export const updateCurrentUser = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
 
-    const existing = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-      .unique();
+    const existing = await findCurrentUser(ctx);
 
+    if (existing?.loginMethod === "password") return existing._id;
     if (existing) {
       await ctx.db.patch(existing._id, {
         name: identity.name,
@@ -69,15 +67,7 @@ export const updateCurrentUser = mutation({
 });
 
 export const getCurrentUserData = query({
-  args: {},
-  handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return null;
-    return await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-      .unique();
-  },
+  args: {}, handler: async ctx => await findCurrentUser(ctx),
 });
 
 export const listStaff = query({

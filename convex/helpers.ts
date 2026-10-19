@@ -1,17 +1,25 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 
 export type UserRole = "owner" | "staff" | "branch_secretary" | "risk_manager";
 
+export async function findCurrentUser(ctx: QueryCtx | MutationCtx) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) return null;
+  if (process.env.CONVEX_SITE_URL && identity.issuer === process.env.CONVEX_SITE_URL) {
+    const id = await getAuthUserId(ctx);
+    const validId = id ? ctx.db.normalizeId("users", id) : null;
+    return validId ? await ctx.db.get(validId) : null;
+  }
+  return await ctx.db.query("users").withIndex("by_token", q => q.eq("tokenIdentifier", identity.tokenIdentifier)).unique();
+}
 export async function getCurrentUser(ctx: QueryCtx | MutationCtx) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) {
     throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
   }
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-    .unique();
+  const user = await findCurrentUser(ctx);
   if (!user) {
     throw new ConvexError({ message: "User not found", code: "NOT_FOUND" });
   }
