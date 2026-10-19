@@ -1,7 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { Authenticated, Unauthenticated, AuthLoading, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
-import { SignInButton } from "@/components/ui/signin.tsx";
+import { OriginalStaffSignIn } from "@/components/OriginalStaffSignIn";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { useAuthActions, useConvexAuth as usePasswordAuth } from "@convex-dev/auth/react";
@@ -215,7 +215,7 @@ export default function AuthenticatedLayout() {
               <p className="text-muted-foreground text-sm">Fuel Credit Management System</p>
             </div>
             <PasswordSignIn />
-            <SignInButton signInText="Original staff login" />
+            <OriginalStaffSignIn />
           </div>
         </div>
       </Unauthenticated>
