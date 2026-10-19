@@ -41,10 +41,10 @@ export default function DriversPage() {
         </Button>
       </div>
 
-      {user?.role === "owner" && <div className="space-y-2 max-w-sm">
+      {(user?.role === "owner" || user?.role === "risk_manager") && <div className="space-y-2 max-w-sm">
         <label htmlFor="branch-filter" className="text-sm font-medium">Branch</label>
         <select disabled={!settings?.branchFilteringEnabled} id="branch-filter" className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={branchId ?? ""} onChange={e => setBranchId((e.target.value || undefined) as Id<"branches"> | undefined)}>
-          <option value="">All branches</option>
+          <option value="">{user?.role === "risk_manager" ? "All assigned branches" : "All branches"}</option>
           {branches?.slice().sort((a,b) => a.name.localeCompare(b.name)).map(branch => <option key={branch._id} value={branch._id}>{branch.name}{branch.isActive ? "" : " (inactive)"}</option>)}
         </select>
         {settings && !settings.branchFilteringEnabled && <p className="text-xs text-muted-foreground">Branch filtering will be available after the backend update is deployed.</p>}

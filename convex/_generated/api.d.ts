@@ -12,6 +12,7 @@ import type * as accountAdmin from "../accountAdmin.js";
 import type * as auth from "../auth.js";
 import type * as admin from "../admin.js";
 import type * as appSettings from "../appSettings.js";
+import type * as complaints from "../complaints.js";
 import type * as branches from "../branches.js";
 import type * as crons from "../crons.js";
 import type * as drivers from "../drivers.js";
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   appSettings: typeof appSettings;
   branches: typeof branches;
+  complaints: typeof complaints;
   crons: typeof crons;
   drivers: typeof drivers;
   eod: typeof eod;

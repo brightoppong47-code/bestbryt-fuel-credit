@@ -187,7 +187,7 @@ function AppLayout() {
         </header>
 
         <main className="flex-1 overflow-auto">
-          {!currentUser ? <p className="p-6">Loading account…</p> : currentUser.role !== "owner" && !currentUser.branchId
+          {!currentUser ? <p className="p-6">Loading account…</p> : currentUser.role !== "owner" && !(currentUser.role === "risk_manager" ? (currentUser.branchIds ?? (currentUser.branchId ? [currentUser.branchId] : [])).length : currentUser.branchId)
             ? <div className="p-6"><h1 className="text-xl font-bold">Branch assignment required</h1><p className="mt-2 text-muted-foreground">Ask admin to assign your branch before viewing or recording customer data.</p></div>
             : <Outlet />}
         </main>

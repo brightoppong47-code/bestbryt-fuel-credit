@@ -1,4 +1,4 @@
-import { isBranchStaff, assertDriverAccess, assertTransactionAccess, accessibleDriverIds } from "./helpers";
+import { assignedBranchIds, canAccessBranch, isBranchStaff, assertDriverAccess, assertTransactionAccess, accessibleDriverIds } from "./helpers";
 import { penaltyDays } from "./lib/penaltyDays";
 import { allocatePayment } from "./lib/paymentAllocation";
 import { ConvexError, v } from "convex/values";
@@ -44,7 +44,7 @@ export const issueCredit = mutation({
 
     // Branch secretaries can only issue credits to drivers in their assigned branch
     if (isBranchStaff(user)) {
-      if (driver.branchId !== user.branchId) {
+      if (!canAccessBranch(user, driver.branchId)) {
         throw new ConvexError({ message: "You can only issue credits to drivers in your assigned branch", code: "FORBIDDEN" });
       }
     }
@@ -275,19 +275,19 @@ export const listTransactions = query({
     const user = await requireStaff(ctx);
 
     // Branch secretaries are scoped to their branch's drivers
-    const isBranchSecretary = isBranchStaff(user) && !!user.branchId;
+    const isBranchSecretary = isBranchStaff(user);
 
-    if (isBranchStaff(user) && (!user.branchId || (args.branchId && args.branchId !== user.branchId))) {
+    if (isBranchStaff(user) && (!assignedBranchIds(user).length || (args.branchId && !canAccessBranch(user,args.branchId)))) {
       return { page: [], isDone: true, continueCursor: "" };
     }
-    const selectedBranch = isBranchSecretary ? user.branchId : args.branchId;
+    const selectedBranch = args.branchId ?? (isBranchSecretary && assignedBranchIds(user).length === 1 ? assignedBranchIds(user)[0] : undefined);
     if (args.driverId) await assertDriverAccess(ctx, user, args.driverId);
     let q;
     if (args.driverId) {
       // If branch secretary, verify this driver belongs to their branch
       if (isBranchSecretary) {
         const driver = await ctx.db.get(args.driverId);
-        if (!driver || driver.branchId !== user.branchId) {
+        if (!driver || !canAccessBranch(user, driver.branchId)) {
           return { page: [], isDone: true, continueCursor: "" };
         }
       }
@@ -311,7 +311,7 @@ export const listTransactions = query({
         const driver = await ctx.db.get(tx.driverId);
 
         // Branch secretaries: skip transactions from other branches
-        if (isBranchSecretary && driver?.branchId !== user.branchId) return null;
+        if (isBranchSecretary && !canAccessBranch(user, driver?.branchId)) return null;
 
         const now = new Date();
         const days = tx.status !== "paid" ? overdueDays(tx.dueAt, now) : 0;
@@ -580,6 +580,7 @@ export const getOverdueAlerts = query({
       const liveTotal = Math.round((tx.totalOwedGhs + penalty) * 100) / 100;
       const remaining = Math.max(0, Math.round((liveTotal - (tx.amountPaidGhs ?? 0)) * 100) / 100);
 
+      if (remaining <= 0) continue;
       const driver = await ctx.db.get(tx.driverId);
       alerts.push({
         ...tx,
@@ -591,6 +592,8 @@ export const getOverdueAlerts = query({
         driverPhone: driver?.phone ?? "",
         driverAccountNumber: driver?.accountNumber ?? "",
         driverIsActive: driver?.isActive ?? false,
+        branchId: driver?.branchId,
+        branchName: driver ? (await ctx.db.get("branches",driver.branchId))?.name ?? "Unknown branch" : "Unknown branch",
       });
     }
 

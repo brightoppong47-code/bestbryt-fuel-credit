@@ -55,3 +55,12 @@ it("rejects inactive branches, weak passwords and existing legacy emails",async(
  await expect(admin.action(api.accountAdmin.createUser,{...args,password:"short"})).rejects.toThrow("12 and 128");
  await expect(admin.action(api.accountAdmin.createUser,{...args,email:"admin@example.com"})).rejects.toThrow("already exists");
 });
+
+it("admin can create a password risk manager assigned to multiple branches",async()=>{
+ const {t,admin,args,ids}=await fixture();
+ const branch2=await t.run(async ctx=>ctx.db.insert("branches",{name:"Second",code:"S",isActive:true,nextSequence:1,createdBy:ids.owner}));
+ const created=await admin.action(api.accountAdmin.createUser,{...args,role:"risk_manager",branchIds:[ids.branchId,branch2]});
+ const user=await t.run(async ctx=>ctx.db.get("users",created.userId as import("./_generated/dataModel").Id<"users">));
+ expect(user?.branchIds).toEqual([ids.branchId,branch2]);
+ expect(user?.role).toBe("risk_manager");
+});

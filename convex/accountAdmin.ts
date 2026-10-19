@@ -12,7 +12,7 @@ export const authorize = internalQuery({ args:{email:v.string()}, handler: async
 } });
 
 export const createUser = action({
-  args: { email:v.string(), name:v.string(), password:v.string(), branchId:v.id("branches"),
+  args: { email:v.string(), name:v.string(), password:v.string(), branchId:v.id("branches"), branchIds:v.optional(v.array(v.id("branches"))),
     role:v.union(v.literal("staff"),v.literal("branch_secretary"),v.literal("risk_manager")) },
   handler: async (ctx,args): Promise<{userId:string}> => {
     await ctx.runQuery(internal.accountAdmin.authorize, {email:args.email.trim().toLowerCase()});
@@ -22,7 +22,7 @@ export const createUser = action({
     if (!args.name.trim()) throw new Error("Enter the user's full name");
     if (args.password.length<12 || args.password.length>128) throw new Error("Use a password between 12 and 128 characters");
     const result=await createAccount(ctx, {provider:"password",account:{id:email,secret:args.password},
-      profile:{tokenIdentifier:`local:${email}`,email,name:args.name.trim(),role:args.role,branchId:args.branchId,loginMethod:"password"},
+      profile:{tokenIdentifier:`local:${email}`,email,name:args.name.trim(),role:args.role,branchId:args.branchId,...(args.branchIds ? {branchIds:args.branchIds} : {}),loginMethod:"password"},
       shouldLinkViaEmail:false,shouldLinkViaPhone:false});
     return {userId:result.user._id};
   },

@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { getCurrentUser, findCurrentUser } from "./helpers";
+import { getCurrentUser, findCurrentUser, validateBranchAssignments } from "./helpers";
 
 type Role = "owner" | "staff" | "branch_secretary" | "risk_manager";
 
@@ -91,6 +91,7 @@ export const updateUserRole = mutation({
       v.literal("risk_manager"),
     ),
     branchId: v.optional(v.id("branches")),
+    branchIds: v.optional(v.array(v.id("branches"))),
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
@@ -103,10 +104,10 @@ export const updateUserRole = mutation({
         code: "FORBIDDEN",
       });
     }
-    if (args.branchId && !await ctx.db.get(args.branchId)) throw new ConvexError({message:"Branch not found",code:"NOT_FOUND"});
+    const assignments = await validateBranchAssignments(ctx, args.role, args.branchId, args.branchIds);
     await ctx.db.patch(args.userId, {
       role: args.role,
-      branchId: args.branchId,
+      ...assignments,
     });
   },
 });

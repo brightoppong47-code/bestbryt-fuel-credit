@@ -1,4 +1,4 @@
-import { isBranchStaff } from "./helpers";
+import { assignedBranchIds, canAccessBranch, isBranchStaff } from "./helpers";
 import { ConvexError, v } from "convex/values";
 import { query } from "./_generated/server";
 import { requireStaff } from "./helpers";
@@ -12,10 +12,10 @@ export const collections = query({
     if (!validDate(args.fromDate) || !validDate(args.toDate) || args.fromDate > args.toDate) {
       throw new ConvexError({ message: "Choose a valid date range", code: "BAD_REQUEST" });
     }
-    if (isBranchStaff(user) && (!user.branchId || (args.branchId && args.branchId !== user.branchId))) {
+    if (isBranchStaff(user) && (!assignedBranchIds(user).length || (args.branchId && !canAccessBranch(user,args.branchId)))) {
       throw new ConvexError({ message: "You can only report on your assigned branch", code: "FORBIDDEN" });
     }
-    const branchId = isBranchStaff(user) ? user.branchId : args.branchId;
+    const branchId = args.branchId ?? (isBranchStaff(user) && assignedBranchIds(user).length === 1 ? assignedBranchIds(user)[0] : undefined);
     const [transactions, payments, drivers, branches] = await Promise.all([
       ctx.db.query("transactions").collect(), ctx.db.query("payments").collect(),
       ctx.db.query("drivers").collect(), ctx.db.query("branches").collect(),
@@ -41,7 +41,7 @@ export const collections = query({
       paidByTx.set(p.transactionId, previous + p.amountGhs);
       const driver = driverMap.get(p.driverId);
       const paymentBranch = driver?.branchId;
-      if (!inRange(p.recordedAt) || (branchId && paymentBranch !== branchId)) continue;
+      if (!canAccessBranch(user,paymentBranch) || !inRange(p.recordedAt) || (branchId && paymentBranch !== branchId)) continue;
       const reconstructed = p.principalGhs === undefined || p.interestGhs === undefined || p.penaltyGhs === undefined;
       const split = reconstructed ? allocatePayment(p.amountGhs, previous, tx.fuelAmountGhs, tx.interestCollectedUpfront ? 0 : tx.interestGhs)
         : { principalGhs: p.principalGhs!, interestGhs: p.interestGhs!, penaltyGhs: p.penaltyGhs! };
@@ -53,7 +53,7 @@ export const collections = query({
     }
     for (const tx of transactions) {
       const driver = driverMap.get(tx.driverId);
-      if (!inRange(tx.issuedAt) || (branchId && driver?.branchId !== branchId)) continue;
+      if (!canAccessBranch(user,driver?.branchId) || !inRange(tx.issuedAt) || (branchId && driver?.branchId !== branchId)) continue;
       const d = day(tx.issuedAt);
       totals.creditsGhs += tx.fuelAmountGhs; d.creditsGhs += tx.fuelAmountGhs;
       if (tx.interestCollectedUpfront) {

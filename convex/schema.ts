@@ -20,6 +20,7 @@ export default defineSchema({
       v.literal("branch_secretary"),
       v.literal("risk_manager"),
     ),
+    branchIds: v.optional(v.array(v.id("branches"))),
     // Branch assigned to this user (required for branch_secretary)
     branchId: v.optional(v.id("branches")),
   })
@@ -27,6 +28,14 @@ export default defineSchema({
     .index("phone", ["phone"])
     .index("by_token", ["tokenIdentifier"])
     .index("by_role", ["role"]),
+
+  complaints: defineTable({
+    driverId: v.id("drivers"), branchId: v.id("branches"),
+    category: v.union(v.literal("vehicle_fault"), v.literal("other")),
+    description: v.string(), status: v.union(v.literal("open"), v.literal("resolved")),
+    reportedBy: v.id("users"), createdAt: v.string(),
+    resolution: v.optional(v.string()), resolvedBy: v.optional(v.id("users")), resolvedAt: v.optional(v.string()),
+  }).index("by_branch", ["branchId"]).index("by_driver", ["driverId"]),
 
   // Pre-assigned roles for users who haven't signed in yet.
   // When a new user logs in, updateCurrentUser checks this table by email

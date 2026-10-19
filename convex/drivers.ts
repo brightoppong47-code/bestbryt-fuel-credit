@@ -1,4 +1,4 @@
-import { isBranchStaff, canAccessBranch, assertBranchAccess, assertDriverAccess } from "./helpers";
+import { isBranchStaff, assignedBranchIds, canAccessBranch, assertBranchAccess, assertDriverAccess } from "./helpers";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireStaff } from "./helpers";
@@ -38,7 +38,7 @@ export const registerDriver = mutation({
     const user = await requireStaff(ctx);
 
     const branch = await ctx.db.get(args.branchId);
-    if (!branch) throw new ConvexError({ message: "Branch not found", code: "NOT_FOUND" });
+    if (!branch?.isActive) throw new ConvexError({ message: "Branch not found", code: "NOT_FOUND" });
 
     // Branch secretaries can only register drivers in their own branch
     if (!canAccessBranch(user, args.branchId)) {
@@ -112,10 +112,10 @@ export const listDrivers = query({
     const user = await requireStaff(ctx);
 
     // Branch secretaries only see drivers in their assigned branch
-    if (isBranchStaff(user) && (!user.branchId || (args.branchId && args.branchId !== user.branchId))) {
+    if (isBranchStaff(user) && (!assignedBranchIds(user).length || (args.branchId && !canAccessBranch(user,args.branchId)))) {
       return { page: [], isDone: true, continueCursor: "" };
     }
-    const branchId = isBranchStaff(user) ? user.branchId : args.branchId;
+    const branchId = args.branchId ?? (isBranchStaff(user) && assignedBranchIds(user).length === 1 ? assignedBranchIds(user)[0] : undefined);
 
     let result;
     if (branchId) {
@@ -125,10 +125,10 @@ export const listDrivers = query({
         .order("desc")
         .paginate(args.paginationOpts);
     } else {
-      result = await ctx.db
-        .query("drivers")
-        .order("desc")
-        .paginate(args.paginationOpts);
+      let query = ctx.db.query("drivers");
+      // Zone membership must be applied before pagination.
+      if (isBranchStaff(user)) query = query.filter(q => q.or(...assignedBranchIds(user).map(id => q.eq(q.field("branchId"), id))));
+      result = await query.order("desc").paginate(args.paginationOpts);
     }
 
     const filtered = args.search

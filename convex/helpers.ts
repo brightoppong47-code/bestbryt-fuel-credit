@@ -59,8 +59,18 @@ import type { Doc, Id } from "./_generated/dataModel";
 export function isBranchStaff(user: Doc<"users">) {
   return user.role !== "owner";
 }
+export function assignedBranchIds(user: Doc<"users">): Id<"branches">[] {
+  return [...new Set(user.role === "risk_manager" && user.branchIds !== undefined
+    ? user.branchIds : user.branchId ? [user.branchId] : [])];
+}
+export async function validateBranchAssignments(ctx: QueryCtx | MutationCtx, role: UserRole, branchId?: Id<"branches">, branchIds?: Id<"branches">[]) {
+  const ids = [...new Set(role === "risk_manager" ? branchIds ?? (branchId ? [branchId] : []) : branchId ? [branchId] : [])];
+  if (ids.length > 50) throw new ConvexError({message:"Choose at most 50 branches",code:"BAD_REQUEST"});
+  for (const id of ids) if (!(await ctx.db.get("branches", id))?.isActive) throw new ConvexError({message:"Choose an active branch",code:"BAD_REQUEST"});
+  return {branchId: role === "owner" ? undefined : ids[0], branchIds:role === "risk_manager" ? ids : undefined};
+}
 export function canAccessBranch(user: Doc<"users">, branchId: Id<"branches"> | undefined) {
-  return !isBranchStaff(user) || (!!user.branchId && user.branchId === branchId);
+  return !isBranchStaff(user) || (!!branchId && assignedBranchIds(user).includes(branchId));
 }
 export function assertBranchAccess(user: Doc<"users">, branchId: Id<"branches"> | undefined) {
   if (!canAccessBranch(user, branchId)) throw new ConvexError({message:"Access is restricted to your assigned branch. Ask admin to assign your branch if needed.",code:"FORBIDDEN"});
@@ -79,8 +89,7 @@ export async function assertTransactionAccess(ctx: QueryCtx | MutationCtx, user:
 }
 export async function accessibleDriverIds(ctx: QueryCtx | MutationCtx, user: Doc<"users">) {
   if (!isBranchStaff(user)) return null;
-  if (!user.branchId) return new Set<Id<"drivers">>();
-  const branchId=user.branchId;
-  const drivers=await ctx.db.query("drivers").withIndex("by_branch",q=>q.eq("branchId",branchId)).collect();
+  const drivers = (await Promise.all(assignedBranchIds(user).map(branchId =>
+    ctx.db.query("drivers").withIndex("by_branch", q => q.eq("branchId", branchId)).collect()))).flat();
   return new Set(drivers.map(d=>d._id));
 }

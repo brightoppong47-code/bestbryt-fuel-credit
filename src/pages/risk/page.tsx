@@ -1,3 +1,5 @@
+import {useState} from "react";
+import {CustomerComplaints} from "./_components/CustomerComplaints";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
@@ -17,7 +19,11 @@ function formatGhs(amount: number) {
 }
 
 export default function RiskManagerPage() {
-  const alerts = useQuery(api.transactions.getOverdueAlerts);
+  const allAlerts = useQuery(api.transactions.getOverdueAlerts);
+  const branches = useQuery(api.branches.listBranches);
+  const settings = useQuery(api.appSettings.getAppSettings);
+  const [branchId,setBranchId]=useState<Id<"branches">|undefined>();
+  const alerts=allAlerts?.filter(alert=>!branchId || alert.branchId===branchId);
   const currentUser = useQuery(api.users.getCurrentUserData);
   const updateDriver = useMutation(api.drivers.updateDriver);
 
@@ -54,17 +60,19 @@ export default function RiskManagerPage() {
         <Button asChild size="sm" className="gap-1.5 shrink-0">
           <Link to="/drivers/new">
             <Plus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Register Driver</span>
+            <span>Register Customer</span>
           </Link>
         </Button>
       </div>
 
+      <div className="space-y-1"><label htmlFor="risk-branch" className="text-sm font-medium">Branch / zone</label><select id="risk-branch" className="w-full border rounded-md bg-background p-2" value={branchId ?? ""} onChange={e=>setBranchId((e.target.value || undefined) as Id<"branches">|undefined)}><option value="">All assigned branches</option>{branches?.map(b=><option key={b._id} value={b._id}>{b.name}</option>)}</select></div>
+      {settings?.riskManagementEnabled ? <CustomerComplaints key={branchId ?? "all"} branchId={branchId}/> : <p className="text-sm text-muted-foreground">The complaints feature will be available after the backend update is deployed.</p>}
       {/* Alert count banner */}
       {alerts !== undefined && alerts.length > 0 && (
         <div className="rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 flex items-center gap-3">
           <ShieldAlert className="w-5 h-5 text-destructive shrink-0" />
           <p className="text-sm font-semibold text-destructive">
-            {alerts.length} driver{alerts.length !== 1 ? "s" : ""} require immediate follow-up
+            {alerts.length} overdue credit{alerts.length !== 1 ? "s" : ""} require immediate follow-up
           </p>
         </div>
       )}
@@ -85,7 +93,7 @@ export default function RiskManagerPage() {
             <EmptyMedia variant="icon"><CheckCircle2 /></EmptyMedia>
             <EmptyTitle>All clear</EmptyTitle>
             <EmptyDescription>
-              No drivers are more than 3 days overdue right now.
+              No customers are 3 or more days overdue in this view.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -118,6 +126,7 @@ export default function RiskManagerPage() {
                     <Badge variant="secondary" className="shrink-0">Deactivated</Badge>
                   )}
                 </div>
+                <p className="text-xs text-muted-foreground mt-1">{alert.branchName}</p>
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
                   <span className="text-xs font-mono text-primary flex items-center gap-1">
                     <Hash className="w-3 h-3" />{alert.driverAccountNumber}

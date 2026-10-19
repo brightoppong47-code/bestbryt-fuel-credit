@@ -205,17 +205,22 @@ function CreateBranchDialog({ open, onClose }: { open: boolean; onClose: () => v
   );
 }
 
+function BranchZonePicker({branches,selected,onChange}:{branches?:{_id:Id<"branches">;name:string;isActive:boolean}[];selected:string[];onChange:(ids:string[])=>void}) {
+ return <fieldset className="space-y-2"><legend className="text-sm font-medium">Assigned branches / zone</legend><p className="text-xs text-muted-foreground">Select the branches this risk manager can access.</p><div className="max-h-40 overflow-y-auto space-y-2 rounded-md border p-3">{branches?.filter(b=>b.isActive || selected.includes(b._id)).map(b=><label key={b._id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.includes(b._id)} onChange={e=>onChange(e.target.checked?[...selected,b._id]:selected.filter(id=>id!==b._id))}/>{b.name}{!b.isActive && " (inactive — remove to save)"}</label>)}</div></fieldset>;
+}
+
 // ─── Assign Role (existing users) ────────────────────────────────────────────
 
 function AssignRoleDialog({
-  userId, currentRole, currentBranchId, userName, open, onClose,
+  userId, currentRole, currentBranchId, currentBranchIds, userName, open, onClose,
 }: {
-  userId: Id<"users">; currentRole: Role; currentBranchId?: Id<"branches">; userName: string; open: boolean; onClose: () => void;
+  userId: Id<"users">; currentRole: Role; currentBranchIds?: Id<"branches">[]; currentBranchId?: Id<"branches">; userName: string; open: boolean; onClose: () => void;
 }) {
   const updateRole = useMutation(api.users.updateUserRole);
   const branches = useQuery(api.branches.listBranches);
   const [selectedRole, setSelectedRole] = useState<Role>(currentRole);
   const [selectedBranch, setSelectedBranch] = useState<string>(currentBranchId ?? "none");
+  const [zone,setZone]=useState<string[]>(currentBranchIds ?? (currentBranchId ? [currentBranchId] : []));
   const [loading, setLoading] = useState(false);
 
   const handleSave = async () => {
@@ -224,6 +229,7 @@ function AssignRoleDialog({
       await updateRole({
         userId,
         role: selectedRole,
+        branchIds:selectedRole === "risk_manager" ? zone as Id<"branches">[] : undefined,
         branchId: (selectedRole !== "owner") && selectedBranch !== "none"
           ? selectedBranch as Id<"branches">
           : undefined,
@@ -238,7 +244,7 @@ function AssignRoleDialog({
   };
 
   const unchanged = selectedRole === currentRole &&
-    (selectedRole === "owner" || selectedBranch === (currentBranchId ?? "none"));
+    (selectedRole === "owner" || (selectedRole === "risk_manager" ? JSON.stringify([...zone].sort()) === JSON.stringify([...(currentBranchIds ?? (currentBranchId ? [currentBranchId] : []))].sort()) : selectedBranch === (currentBranchId ?? "none")));
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -256,7 +262,8 @@ function AssignRoleDialog({
               </SelectContent>
             </Select>
           </div>
-          {(selectedRole !== "owner") && (
+          {selectedRole === "risk_manager" && <BranchZonePicker branches={branches} selected={zone} onChange={setZone} />}
+          {(selectedRole !== "owner" && selectedRole !== "risk_manager") && (
             <div className="space-y-1.5">
               <Label>Assigned Branch *</Label>
               <Select value={selectedBranch} onValueChange={setSelectedBranch}>
@@ -294,14 +301,14 @@ function CreateUserDialog({ open, onClose, initial }: { open: boolean; onClose: 
   const [name,setName]=useState(initial?.name ?? "");
   const [email,setEmail]=useState(initial?.email ?? "");
   const [role,setRole]=useState<"staff"|"branch_secretary"|"risk_manager">(initial?.role && initial.role!=="owner" ? initial.role : "staff");
-  const [branchId,setBranchId]=useState("");const [password,setPassword]=useState("");
+  const [branchId,setBranchId]=useState("");const [zone,setZone]=useState<string[]>([]);const [password,setPassword]=useState("");
   const [loading,setLoading]=useState(false);const [done,setDone]=useState(false);const [error,setError]=useState("");
   const close=()=>{setPassword("");onClose();};
   return <Dialog open={open} onOpenChange={o=>{if(!o&&!loading)close();}}><DialogContent><DialogHeader><DialogTitle>Create User Account</DialogTitle></DialogHeader>
     {done ? <div className="space-y-4 py-4"><p className="font-medium">Account created for {email}.</p><p className="text-sm text-muted-foreground">Share the app link and the password you entered privately with this user. They can sign in using the email and password form. Their role and branch are already assigned.</p><Button onClick={close}>Done</Button></div>
     : <form className="space-y-4 mt-2" onSubmit={async e=>{
       e.preventDefault();setLoading(true);setError("");
-      try {await createUser({email,name,password,role,branchId:branchId as Id<"branches">});setPassword("");setDone(true);}
+      try {await createUser({email,name,password,role,branchId:(role === "risk_manager" ? zone[0] : branchId) as Id<"branches">,branchIds:role === "risk_manager" ? zone as Id<"branches">[] : undefined});setPassword("");setDone(true);}
       catch(err){setError(err instanceof Error ? err.message : "Could not create account");}finally{setLoading(false);}
     }}>
       {!settings?.accountCreationEnabled && <p role="alert" className="text-sm text-muted-foreground">Account creation requires the backend authentication update to be activated first.</p>}
@@ -309,9 +316,9 @@ function CreateUserDialog({ open, onClose, initial }: { open: boolean; onClose: 
       <div className="space-y-1"><Label htmlFor="new-user-email">Email</Label><Input id="new-user-email" type="email" autoComplete="off" value={email} onChange={e=>setEmail(e.target.value)} required disabled={loading}/></div>
       <div className="space-y-1"><Label htmlFor="new-user-password">Initial password</Label><Input id="new-user-password" type="password" autoComplete="new-password" minLength={12} maxLength={128} value={password} onChange={e=>setPassword(e.target.value)} required disabled={loading}/><p className="text-xs text-muted-foreground">12–128 characters. Share it privately; the app will not show it again.</p></div>
       <div className="space-y-1"><Label htmlFor="new-user-role">Role</Label><select id="new-user-role" className="w-full rounded-md border bg-background p-2" value={role} onChange={e=>setRole(e.target.value as typeof role)} disabled={loading}>{["staff","branch_secretary","risk_manager"].map(r=><option key={r} value={r}>{ROLE_LABELS[r as Role]}</option>)}</select></div>
-      <div className="space-y-1"><Label htmlFor="new-user-branch">Assigned branch</Label><select id="new-user-branch" className="w-full rounded-md border bg-background p-2" value={branchId} onChange={e=>setBranchId(e.target.value)} required disabled={loading}><option value="">Choose branch</option>{branches?.filter(b=>b.isActive).map(b=><option key={b._id} value={b._id}>{b.name}</option>)}</select></div>
+      {role === "risk_manager" ? <BranchZonePicker branches={branches} selected={zone} onChange={setZone}/> : <div className="space-y-1"><Label htmlFor="new-user-branch">Assigned branch</Label><select id="new-user-branch" className="w-full rounded-md border bg-background p-2" value={branchId} onChange={e=>setBranchId(e.target.value)} required disabled={loading}><option value="">Choose branch</option>{branches?.filter(b=>b.isActive).map(b=><option key={b._id} value={b._id}>{b.name}</option>)}</select></div>}
       <RoleHint role={role}/>{error&&<p role="alert" className="text-sm text-destructive">{error}</p>}
-      <DialogFooter><Button type="button" variant="secondary" disabled={loading} onClick={close}>Cancel</Button><Button disabled={loading||!settings?.accountCreationEnabled||!branchId||password.length<12}>{loading?"Creating…":"Create account"}</Button></DialogFooter>
+      <DialogFooter><Button type="button" variant="secondary" disabled={loading} onClick={close}>Cancel</Button><Button disabled={loading||!settings?.accountCreationEnabled||!(role === "risk_manager" ? zone.length : branchId)||password.length<12}>{loading?"Creating…":"Create account"}</Button></DialogFooter>
     </form>}
   </DialogContent></Dialog>;
 }
@@ -321,7 +328,7 @@ function RoleHint({ role }: { role: Role }) {
     owner: "Full access — manage branches, team roles, all data and reports.",
     staff: "View and register customers, issue fuel credits, record payments and view reports in their assigned branch only.",
     branch_secretary: "Register drivers, issue fuel credits, record payments.",
-    risk_manager: "View overdue alerts (3+ days), call drivers, register and deactivate drivers.",
+    risk_manager: "Follow up customers 3+ days overdue, register customers and report vehicle faults or other complaints across assigned branches.",
   };
   return (
     <p className="text-xs text-muted-foreground rounded-lg bg-muted px-3 py-2 leading-relaxed">
@@ -391,7 +398,7 @@ export default function SettingsPage() {
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const [pendingUser,setPendingUser]=useState<{email:string;name?:string;role:Role}|undefined>();
   const [assignRoleTarget, setAssignRoleTarget] = useState<{
-    userId: Id<"users">; role: Role; name: string; branchId?: Id<"branches">;
+    userId: Id<"users">; role: Role; name: string; branchId?: Id<"branches">; branchIds?: Id<"branches">[];
   } | null>(null);
 
   const isOwner = currentUser?.role === "owner";
@@ -540,6 +547,7 @@ export default function SettingsPage() {
                           role: user.role as Role,
                           name: user.name ?? "Unknown",
                           branchId: user.branchId as Id<"branches"> | undefined,
+                          branchIds: user.branchIds,
                         });
                       }
                     }}
@@ -556,6 +564,7 @@ export default function SettingsPage() {
                           )}
                         </p>
                         <p className="text-xs text-muted-foreground">{user.email}</p>
+                        {user.role !== "owner" && <p className="text-xs text-muted-foreground">{(user.role === "risk_manager" ? user.branchIds ?? (user.branchId ? [user.branchId] : []) : user.branchId ? [user.branchId] : []).map(id=>branches?.find(b=>b._id===id)?.name ?? "Unknown branch").join(", ") || "No branch assigned"}</p>}
                       </div>
                     </div>
                     <RoleBadge role={user.role as Role} />
@@ -579,7 +588,7 @@ export default function SettingsPage() {
                     {role === "owner" && "Full access — manage branches, team roles, all data, and reports."}
                     {role === "staff" && "View and register customers, issue fuel credits, record payments and view reports in their assigned branch only."}
                     {role === "branch_secretary" && "Register and view drivers within their assigned branch only. Issue credits to their branch's drivers, record payments, submit EOD reports."}
-                    {role === "risk_manager" && "View overdue alerts (3+ days), call drivers, register and deactivate drivers."}
+                    {role === "risk_manager" && "Follow up customers 3+ days overdue, register customers and report vehicle faults or other complaints across assigned branches."}
                   </p>
                 </div>
               ))}
@@ -684,6 +693,7 @@ export default function SettingsPage() {
           userId={assignRoleTarget.userId}
           currentRole={assignRoleTarget.role}
           currentBranchId={assignRoleTarget.branchId}
+          currentBranchIds={assignRoleTarget.branchIds}
           userName={assignRoleTarget.name}
           open={true}
           onClose={() => setAssignRoleTarget(null)}

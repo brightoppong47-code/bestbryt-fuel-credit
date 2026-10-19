@@ -1,6 +1,6 @@
 import { convexAuth } from "@convex-dev/auth/server";
 import { Password } from "@convex-dev/auth/providers/Password";
-import { requireOwner } from "./helpers";
+import { requireOwner, validateBranchAssignments } from "./helpers";
 import type { MutationCtx } from "./_generated/server";
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
@@ -23,10 +23,12 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       const role = profile.role;
       if (role !== "staff" && role !== "branch_secretary" && role !== "risk_manager") throw new Error("Choose a staff role");
       const branchId = ctx.db.normalizeId("branches", String(profile.branchId ?? ""));
-      const branch = branchId ? await ctx.db.get("branches", branchId) : null;
-      if (!branchId || !branch?.isActive) throw new Error("Choose an active branch");
+      const zone = Array.isArray(profile.branchIds) ? profile.branchIds.map(id => ctx.db.normalizeId("branches", String(id))) : undefined;
+      if (zone?.some(id => !id)) throw new Error("Choose valid branches");
+      const assignments = await validateBranchAssignments(ctx, role, branchId ?? undefined, zone as import("./_generated/dataModel").Id<"branches">[] | undefined);
+      if (!assignments.branchId) throw new Error("Choose an active branch");
       const userId = await ctx.db.insert("users", {
-        tokenIdentifier: `local:${email}`, email, name: String(profile.name ?? "").trim(), role, branchId,
+        tokenIdentifier: `local:${email}`, email, name: String(profile.name ?? "").trim(), role, ...assignments,
         loginMethod: "password",
       });
       const invites = await ctx.db.query("invited_users").withIndex("by_email", q => q.eq("email", email)).collect();

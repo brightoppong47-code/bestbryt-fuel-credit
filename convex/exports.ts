@@ -1,4 +1,4 @@
-import { isBranchStaff, accessibleDriverIds } from "./helpers";
+import { assignedBranchIds, canAccessBranch, isBranchStaff, accessibleDriverIds } from "./helpers";
 import { penaltyDays } from "./lib/penaltyDays";
 import { v } from "convex/values";
 import { query } from "./_generated/server";
@@ -248,10 +248,10 @@ export const collections = query({
     if (!validDate(args.fromDate) || !validDate(args.toDate) || args.fromDate > args.toDate) {
       throw new Error("Choose a valid date range");
     }
-    if (isBranchStaff(user) && (!user.branchId || (args.branchId && args.branchId !== user.branchId))) {
+    if (isBranchStaff(user) && (!assignedBranchIds(user).length || (args.branchId && !canAccessBranch(user,args.branchId)))) {
       throw new Error("You can only report on your assigned branch");
     }
-    const branchId = isBranchStaff(user) ? user.branchId : args.branchId;
+    const branchId = args.branchId ?? (isBranchStaff(user) && assignedBranchIds(user).length === 1 ? assignedBranchIds(user)[0] : undefined);
     const [transactions, payments, drivers, branches] = await Promise.all([
       ctx.db.query("transactions").collect(), ctx.db.query("payments").collect(),
       ctx.db.query("drivers").collect(), ctx.db.query("branches").collect(),
@@ -260,7 +260,7 @@ export const collections = query({
     const driverMap = new Map(drivers.map(d => [d._id, d]));
     const branchMap = new Map(branches.map(b => [b._id, b]));
     const branchCredits = new Map<string, { branchId: string; branch: string; creditsCount: number; creditsGhs: number }>(
-      branches.filter(b => !branchId || b._id === branchId).map(b => [b._id, { branchId: b._id, branch: b.name, creditsCount: 0, creditsGhs: 0 }])
+      branches.filter(b => canAccessBranch(user,b._id) && (!branchId || b._id === branchId)).map(b => [b._id, { branchId: b._id, branch: b.name, creditsCount: 0, creditsGhs: 0 }])
     );
     const inRange = (at: string) => at.slice(0, 10) >= args.fromDate && at.slice(0, 10) <= args.toDate;
     const totals = { principalGhs: 0, interestGhs: 0, penaltyGhs: 0, cashGhs: 0, creditsGhs: 0, paymentsCount: 0, reconstructedCount: 0 };
@@ -280,7 +280,7 @@ export const collections = query({
       paidByTx.set(p.transactionId, previous + p.amountGhs);
       const driver = driverMap.get(p.driverId);
       const paymentBranch = driver?.branchId;
-      if (!inRange(p.recordedAt) || (branchId && paymentBranch !== branchId)) continue;
+      if (!canAccessBranch(user,paymentBranch) || !inRange(p.recordedAt) || (branchId && paymentBranch !== branchId)) continue;
       const reconstructed = true;
       const principalGhs = Math.min(p.amountGhs, Math.max(0, tx.fuelAmountGhs - previous));
       const deferredInterest = tx.interestCollectedUpfront ? 0 : tx.interestGhs;
@@ -295,7 +295,7 @@ export const collections = query({
     }
     for (const tx of transactions) {
       const driver = driverMap.get(tx.driverId);
-      if (!inRange(tx.issuedAt) || (branchId && driver?.branchId !== branchId)) continue;
+      if (!canAccessBranch(user,driver?.branchId) || !inRange(tx.issuedAt) || (branchId && driver?.branchId !== branchId)) continue;
       const d = day(tx.issuedAt);
       totals.creditsGhs += tx.fuelAmountGhs; d.creditsGhs += tx.fuelAmountGhs;
       const creditBranchId = driver?.branchId ?? "unknown";
