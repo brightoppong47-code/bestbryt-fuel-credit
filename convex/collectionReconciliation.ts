@@ -118,7 +118,8 @@ export const dailyCollections = query({
       cashGhs: total(cash), staffMomoGhs: total(staffMomo), companyMomoGhs: total(companyMomo),
       legacyUnclassifiedGhs: total(legacy),
       staffHeldGhs: staffHeld, verifiedHandoverGhs: verifiedHandover,
-      outstandingHandoverGhs: money(Math.max(0, staffHeld - verifiedHandover)),
+      // Handovers may settle collections from earlier dates. Never subtract same-day handovers from same-day receipts as an outstanding balance.
+      handoverBalanceRequiresAllocation: true,
       handovers: handoverRows,
       pendingPayments: rows.filter(p => !p.reconciliationStatus || p.reconciliationStatus === "pending").length,
     };
