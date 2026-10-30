@@ -25,6 +25,7 @@ export const recordHandover = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireStaff(ctx);
+    if (!["owner", "staff", "branch_secretary"].includes(user.role)) throw new ConvexError({ code: "FORBIDDEN", message: "Only collection staff may record handovers" });
     assertBranchAccess(user, args.branchId);
     const branch = await ctx.db.get(args.branchId);
     if (!branch?.isActive) throw new ConvexError({ code: "BAD_REQUEST", message: "Choose an active branch" });
