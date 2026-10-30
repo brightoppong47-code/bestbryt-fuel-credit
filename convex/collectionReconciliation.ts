@@ -27,7 +27,7 @@ export const recordHandover = mutation({
     const user = await requireStaff(ctx);
     if (!["owner", "staff", "branch_secretary"].includes(user.role)) throw new ConvexError({ code: "FORBIDDEN", message: "Only collection staff may record handovers" });
     assertBranchAccess(user, args.branchId);
-    const branch = await ctx.db.get(args.branchId);
+    const branch = await ctx.db.get("branches", args.branchId);
     if (!branch?.isActive) throw new ConvexError({ code: "BAD_REQUEST", message: "Choose an active branch" });
     const amountGhs = positiveAmount(args.amountGhs);
     validDate(args.collectionDate);
@@ -58,12 +58,12 @@ export const reviewHandover = mutation({
   },
   handler: async (ctx, args) => {
     const owner = await requireOwner(ctx);
-    const handover = await ctx.db.get(args.handoverId);
+    const handover = await ctx.db.get("collection_handovers", args.handoverId);
     if (!handover) throw new ConvexError({ code: "NOT_FOUND", message: "Handover not found" });
     if (handover.status !== "pending") throw new ConvexError({ code: "CONFLICT", message: "Already reviewed; create a separate correction" });
     if (!args.note.trim()) throw new ConvexError({ code: "BAD_REQUEST", message: "Enter the verification evidence or discrepancy" });
     const now = new Date().toISOString();
-    await ctx.db.patch(args.handoverId, { status: args.decision, verifiedBy: owner._id, verifiedAt: now });
+    await ctx.db.patch("collection_handovers", args.handoverId, { status: args.decision, verifiedBy: owner._id, verifiedAt: now });
     await ctx.db.insert("collection_reconciliation_events", {
       branchId: handover.branchId, handoverId: args.handoverId,
       action: args.decision === "verified" ? "verify" : "dispute",
@@ -81,15 +81,15 @@ export const reviewPayment = mutation({
   },
   handler: async (ctx, args) => {
     const owner = await requireOwner(ctx);
-    const payment = await ctx.db.get(args.paymentId);
+    const payment = await ctx.db.get("payments", args.paymentId);
     if (!payment) throw new ConvexError({ code: "NOT_FOUND", message: "Payment not found" });
     if (payment.reconciliationStatus && payment.reconciliationStatus !== "pending")
       throw new ConvexError({ code: "CONFLICT", message: "Already reviewed; use a separate correction" });
     if (!args.note.trim()) throw new ConvexError({ code: "BAD_REQUEST", message: "Enter the supporting evidence or discrepancy" });
-    const driver = await ctx.db.get(payment.driverId);
+    const driver = await ctx.db.get("drivers", payment.driverId);
     if (!driver) throw new ConvexError({ code: "NOT_FOUND", message: "Customer not found" });
     const now = new Date().toISOString();
-    await ctx.db.patch(args.paymentId, { reconciliationStatus: args.decision, reconciledBy: owner._id, reconciledAt: now });
+    await ctx.db.patch("payments", args.paymentId, { reconciliationStatus: args.decision, reconciledBy: owner._id, reconciledAt: now });
     await ctx.db.insert("collection_reconciliation_events", {
       branchId: payment.branchId ?? driver.branchId, paymentId: args.paymentId,
       action: args.decision === "verified" ? "verify" : "dispute",
