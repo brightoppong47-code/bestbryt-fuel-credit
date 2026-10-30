@@ -106,7 +106,11 @@ export const dailyCollections = query({
     assertBranchAccess(user, args.branchId);
     validDate(args.date);
     const payments = await ctx.db.query("payments").collect();
-    const handovers = await ctx.db.query("collection_handovers").withIndex("by_branch", q => q.eq("branchId", args.branchId)).collect();
+    const branchHandovers = await ctx.db.query("collection_handovers").withIndex("by_branch", q => q.eq("branchId", args.branchId)).collect();
+
+const handovers = user.role === "owner"
+  ? branchHandovers
+  : branchHandovers.filter(h => h.staffId === user._id);
     const date = (s: string) => s.slice(0, 10) === args.date;
     const rows = payments.filter(p => p.branchId === args.branchId && date(p.recordedAt));
     const handoverRows = handovers.filter(h => h.collectionDate === args.date);
