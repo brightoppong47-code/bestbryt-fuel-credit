@@ -14,6 +14,7 @@ import IssueCreditPage from "./pages/credits/_components/IssueCreditPage.tsx";
 import TransactionDetailPage from "./pages/credits/[transactionId]/page.tsx";
 import ReportsPage from "./pages/reports/page.tsx";
 import ReconciliationPage from "./pages/reconciliation/page.tsx";
+import CollectionHandoverPage from "./pages/handovers/page.tsx";
 import SettingsPage from "./pages/settings/page.tsx";
 import RiskManagerPage from "./pages/risk/page.tsx";
 import MessagesPage from "./pages/messages/page.tsx";
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="/credits/:transactionId" element={<TransactionDetailPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/reconciliation" element={<ReconciliationPage />} />
+            <Route path="/handovers" element={<CollectionHandoverPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/risk" element={<RiskManagerPage />} />
             <Route path="/messages" element={<MessagesPage />} />
