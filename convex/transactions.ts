@@ -117,6 +117,8 @@ export const issueCredit = mutation({
 export const markPaid = mutation({
   args: {
     transactionId: v.id("transactions"),
+    paymentMethod: v.optional(v.union(v.literal("cash"), v.literal("company_momo"), v.literal("staff_momo"))),
+    externalReference: v.optional(v.string()),
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -126,6 +128,10 @@ export const markPaid = mutation({
     if (!tx) throw new ConvexError({ message: "Transaction not found", code: "NOT_FOUND" });
     if (tx.status === "paid") throw new ConvexError({ message: "Already paid", code: "CONFLICT" });
 
+    if (args.paymentMethod && args.paymentMethod !== "cash" && !args.externalReference?.trim())
+      throw new ConvexError({ message: "Enter the MoMo transaction reference", code: "BAD_REQUEST" });
+    if (args.externalReference && args.externalReference.trim().length > 120)
+      throw new ConvexError({ message: "Payment reference is too long", code: "BAD_REQUEST" });
     const now = new Date();
     const days = overdueDays(tx.dueAt, now);
     const penaltyGhs =
@@ -138,7 +144,7 @@ export const markPaid = mutation({
 
     // Record the final payment entry if there's still something to pay
     if (remaining > 0) {
-      await ctx.db.insert("payments", {
+      const paymentId = await ctx.db.insert("payments", {
         transactionId: args.transactionId,
         driverId: tx.driverId,
         amountGhs: remaining,
@@ -147,7 +153,11 @@ export const markPaid = mutation({
         note: args.notes,
         recordedBy: user._id,
         recordedAt: now.toISOString(),
+        paymentMethod: args.paymentMethod,
+        externalReference: args.externalReference?.trim() || undefined,
+        reconciliationStatus: "pending",
       });
+      await ctx.db.patch(paymentId, { receiptNumber: `BBV-${paymentId}` });
     }
 
     await ctx.db.patch(args.transactionId, {
@@ -165,6 +175,8 @@ export const recordPayment = mutation({
   args: {
     transactionId: v.id("transactions"),
     amountGhs: v.number(),
+    paymentMethod: v.optional(v.union(v.literal("cash"), v.literal("company_momo"), v.literal("staff_momo"))),
+    externalReference: v.optional(v.string()),
     note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -175,6 +187,10 @@ export const recordPayment = mutation({
     if (tx.status === "paid") throw new ConvexError({ message: "Transaction already fully paid", code: "CONFLICT" });
     if (args.amountGhs <= 0) throw new ConvexError({ message: "Payment amount must be greater than 0", code: "BAD_REQUEST" });
 
+    if (args.paymentMethod && args.paymentMethod !== "cash" && !args.externalReference?.trim())
+      throw new ConvexError({ message: "Enter the MoMo transaction reference", code: "BAD_REQUEST" });
+    if (args.externalReference && args.externalReference.trim().length > 120)
+      throw new ConvexError({ message: "Payment reference is too long", code: "BAD_REQUEST" });
     const now = new Date();
     const days = overdueDays(tx.dueAt, now);
     const penaltyGhs = days > 0
@@ -196,7 +212,7 @@ export const recordPayment = mutation({
     const isFullyPaid = newAmountPaid >= liveTotal;
 
     // Log this payment
-    await ctx.db.insert("payments", {
+    const paymentId = await ctx.db.insert("payments", {
       transactionId: args.transactionId,
       driverId: tx.driverId,
       amountGhs: paymentAmount,
@@ -205,7 +221,11 @@ export const recordPayment = mutation({
       note: args.note,
       recordedBy: user._id,
       recordedAt: now.toISOString(),
+      paymentMethod: args.paymentMethod,
+      externalReference: args.externalReference?.trim() || undefined,
+      reconciliationStatus: "pending",
     });
+    await ctx.db.patch(paymentId, { receiptNumber: `BBV-${paymentId}` });
 
     // Update the transaction
     await ctx.db.patch(args.transactionId, {
