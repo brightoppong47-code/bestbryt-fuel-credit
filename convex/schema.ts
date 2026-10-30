@@ -159,6 +159,7 @@ export default defineSchema({
   // Separate movement of staff-held money to the business. A handover is NOT a customer payment.
   collection_handovers: defineTable({
     branchId: v.id("branches"),
+    collectionDate: v.optional(v.string()), // Date of collections settled; optional for historical handovers.
     staffId: v.id("users"),
     amountGhs: v.number(),
     method: v.union(v.literal("cash"), v.literal("company_momo")),
