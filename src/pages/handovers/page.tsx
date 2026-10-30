@@ -14,6 +14,7 @@ export default function CollectionHandoverPage() {
   const branches = useQuery(api.branches.listBranches);
   const [selectedBranch, setSelectedBranch] = useState("");
   const [amount, setAmount] = useState("");
+  const [collectionDate, setCollectionDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState<HandoverMethod>("cash");
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
@@ -31,6 +32,7 @@ export default function CollectionHandoverPage() {
       await recordHandover({
         branchId: branchId as Id<"branches">,
         amountGhs: value,
+        collectionDate,
         method,
         externalReference: method === "company_momo" ? reference.trim() : undefined,
         note: note.trim() || undefined,
@@ -51,6 +53,7 @@ export default function CollectionHandoverPage() {
             {branches?.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
           </select>
         </label>
+        <label className="block text-sm">Collection date<Input className="mt-1" type="date" required max={new Date().toISOString().slice(0, 10)} value={collectionDate} onChange={e => setCollectionDate(e.target.value)} /></label>
         <label className="block text-sm">Amount (GHS)<Input className="mt-1" type="number" min="0.01" step="0.01" required value={amount} onChange={e => setAmount(e.target.value)} /></label>
         <label className="block text-sm">How money was handed over
           <select className="mt-1 w-full border rounded-md bg-background p-2" value={method} onChange={e => { setMethod(e.target.value as HandoverMethod); setReference(""); }}>
