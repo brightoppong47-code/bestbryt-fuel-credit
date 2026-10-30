@@ -1,0 +1,30 @@
+name: Prepare Convex development deployment
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/security/payment-reconciliation-audit-2026-10'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm run build
+      - name: Verify development key configured (no deployment)
+        env:
+          CONVEX_DEV_DEPLOY_KEY: ${{ secrets.CONVEX_DEV_DEPLOY_KEY }}
+        run: |
+          if [ -z "$CONVEX_DEV_DEPLOY_KEY" ]; then
+            echo "::notice::CONVEX_DEV_DEPLOY_KEY is not configured. No deployment attempted."
+          else
+            echo "Development deployment key is configured. No deployment attempted."
+          fi
