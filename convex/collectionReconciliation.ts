@@ -18,6 +18,7 @@ export const recordHandover = mutation({
   args: {
     branchId: v.id("branches"),
     amountGhs: v.number(),
+    collectionDate: v.string(),
     method: v.union(v.literal("cash"), v.literal("company_momo")),
     externalReference: v.optional(v.string()),
     note: v.optional(v.string()),
@@ -28,12 +29,15 @@ export const recordHandover = mutation({
     const branch = await ctx.db.get(args.branchId);
     if (!branch?.isActive) throw new ConvexError({ code: "BAD_REQUEST", message: "Choose an active branch" });
     const amountGhs = positiveAmount(args.amountGhs);
+    validDate(args.collectionDate);
+    if (args.collectionDate > new Date().toISOString().slice(0, 10)) throw new ConvexError({ code: "BAD_REQUEST", message: "Collection date cannot be in the future" });
     if (args.method === "company_momo" && !args.externalReference?.trim())
       throw new ConvexError({ code: "BAD_REQUEST", message: "Enter the MoMo transfer reference" });
     return await ctx.db.insert("collection_handovers", {
       branchId: args.branchId,
       staffId: user._id,
       amountGhs,
+      collectionDate: args.collectionDate,
       method: args.method,
       externalReference: args.externalReference?.trim(),
       note: args.note?.trim(),
@@ -104,7 +108,8 @@ export const dailyCollections = query({
     const handovers = await ctx.db.query("collection_handovers").withIndex("by_branch", q => q.eq("branchId", args.branchId)).collect();
     const date = (s: string) => s.slice(0, 10) === args.date;
     const rows = payments.filter(p => p.branchId === args.branchId && date(p.recordedAt));
-    const handoverRows = handovers.filter(h => date(h.recordedAt));
+    const handoverRows = handovers.filter(h => h.collectionDate === args.date);
+    const unallocatedLegacyHandovers = handovers.filter(h => !h.collectionDate && date(h.recordedAt));
     const total = (items: {amountGhs: number}[]) => money(items.reduce((sum, p) => sum + p.amountGhs, 0));
     const cash = rows.filter(p => p.paymentMethod === "cash");
     const staffMomo = rows.filter(p => p.paymentMethod === "staff_momo");
@@ -118,6 +123,7 @@ export const dailyCollections = query({
       cashGhs: total(cash), staffMomoGhs: total(staffMomo), companyMomoGhs: total(companyMomo),
       legacyUnclassifiedGhs: total(legacy),
       staffHeldGhs: staffHeld, verifiedHandoverGhs: verifiedHandover,
+      unallocatedLegacyHandovers: unallocatedLegacyHandovers.length,
       // Handovers may settle collections from earlier dates. Never subtract same-day handovers from same-day receipts as an outstanding balance.
       handoverBalanceRequiresAllocation: true,
       handovers: handoverRows,
