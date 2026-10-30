@@ -26,6 +26,7 @@ import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge.tsx";
 
 type PaymentMode = "none" | "part" | "full";
+type PaymentMethod = "cash" | "company_momo" | "staff_momo";
 type AlertChannel = "sms" | "whatsapp";
 type AlertType = "balance_due" | "payment_received" | "overdue_notice";
 
@@ -34,6 +35,8 @@ export default function TransactionDetailPage() {
   const navigate = useNavigate();
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("none");
   const [partAmount, setPartAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [externalReference, setExternalReference] = useState("");
   const [loading, setLoading] = useState(false);
 
   const markPaid = useMutation(api.transactions.markPaid);
@@ -89,6 +92,7 @@ export default function TransactionDetailPage() {
 
   const handlePartPayment = async () => {
     if (!transactionId) return;
+    if (paymentMethod !== "cash" && !externalReference.trim()) { toast.error("Enter the MoMo transaction reference."); return; }
     const amount = parseFloat(partAmount);
     if (isNaN(amount) || amount <= 0) {
       toast.error("Enter a valid amount greater than 0.");
@@ -103,6 +107,8 @@ export default function TransactionDetailPage() {
       const result = await recordPayment({
         transactionId: transactionId as Id<"transactions">,
         amountGhs: amount,
+        paymentMethod,
+        externalReference: paymentMethod === "cash" ? undefined : externalReference.trim(),
       });
       if (result.isFullyPaid) {
         toast.success("Full payment received! Transaction closed.");
@@ -110,6 +116,7 @@ export default function TransactionDetailPage() {
         toast.success(`Payment of GHS ${fmt(amount)} recorded. Remaining: GHS ${fmt(result.remaining)}`);
       }
       setPartAmount("");
+      setExternalReference("");
       setPaymentMode("none");
     } catch (err) {
       if (err instanceof ConvexError) {
@@ -186,10 +193,12 @@ export default function TransactionDetailPage() {
 
   const handleMarkFullyPaid = async () => {
     if (!transactionId) return;
+    if (paymentMethod !== "cash" && !externalReference.trim()) { toast.error("Enter the MoMo transaction reference."); return; }
     setLoading(true);
     try {
-      await markPaid({ transactionId: transactionId as Id<"transactions"> });
-      toast.success("Payment confirmed! Transaction marked as paid.");
+      await markPaid({ transactionId: transactionId as Id<"transactions">, paymentMethod, externalReference: paymentMethod === "cash" ? undefined : externalReference.trim() });
+      toast.success("Payment recorded; awaiting admin reconciliation.");
+      setExternalReference("");
       setPaymentMode("none");
     } catch (err) {
       if (err instanceof ConvexError) {
@@ -590,6 +599,17 @@ export default function TransactionDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2 rounded-lg border p-3">
+              <Label htmlFor="payment-method">Payment received through</Label>
+              <select id="payment-method" className="w-full rounded-md border bg-background p-2 text-sm" value={paymentMethod} onChange={e => { setPaymentMethod(e.target.value as PaymentMethod); setExternalReference(""); }}>
+                <option value="cash">Cash</option>
+                <option value="company_momo">Company MoMo</option>
+                <option value="staff_momo">Staff MoMo</option>
+              </select>
+              {paymentMethod !== "cash" && <div className="space-y-1"><Label htmlFor="momo-reference">MoMo transaction reference</Label><Input id="momo-reference" value={externalReference} maxLength={120} onChange={e => setExternalReference(e.target.value)} placeholder="Enter reference from transfer" /></div>}
+              <p className="text-xs text-muted-foreground">Customer debt is updated when recorded. Admin verifies receipt of money separately.</p>
+            </div>
+
             <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Total Due</span>
@@ -662,6 +682,17 @@ export default function TransactionDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2 rounded-lg border p-3">
+              <Label htmlFor="payment-method">Payment received through</Label>
+              <select id="payment-method" className="w-full rounded-md border bg-background p-2 text-sm" value={paymentMethod} onChange={e => { setPaymentMethod(e.target.value as PaymentMethod); setExternalReference(""); }}>
+                <option value="cash">Cash</option>
+                <option value="company_momo">Company MoMo</option>
+                <option value="staff_momo">Staff MoMo</option>
+              </select>
+              {paymentMethod !== "cash" && <div className="space-y-1"><Label htmlFor="momo-reference">MoMo transaction reference</Label><Input id="momo-reference" value={externalReference} maxLength={120} onChange={e => setExternalReference(e.target.value)} placeholder="Enter reference from transfer" /></div>}
+              <p className="text-xs text-muted-foreground">Customer debt is updated when recorded. Admin verifies receipt of money separately.</p>
+            </div>
+
             <div className="rounded-lg bg-muted/50 p-4 space-y-2">
               {tx.amountPaidGhs > 0 && (
                 <div className="flex justify-between text-sm">
