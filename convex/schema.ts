@@ -145,9 +145,48 @@ export default defineSchema({
     note: v.optional(v.string()),
     recordedBy: v.id("users"),
     recordedAt: v.string(),
+    // Optional for compatibility with existing production payment records.
+    paymentMethod: v.optional(v.union(v.literal("cash"), v.literal("company_momo"), v.literal("staff_momo"))),
+    externalReference: v.optional(v.string()),
+    receiptNumber: v.optional(v.string()),
+    reconciliationStatus: v.optional(v.union(v.literal("pending"), v.literal("verified"), v.literal("disputed"))),
+    reconciledBy: v.optional(v.id("users")),
+    reconciledAt: v.optional(v.string()),
   })
     .index("by_transaction", ["transactionId"])
     .index("by_driver", ["driverId"]),
+
+  // Separate movement of staff-held money to the business. A handover is NOT a customer payment.
+  collection_handovers: defineTable({
+    branchId: v.id("branches"),
+    staffId: v.id("users"),
+    amountGhs: v.number(),
+    method: v.union(v.literal("cash"), v.literal("company_momo")),
+    externalReference: v.optional(v.string()),
+    recordedAt: v.string(),
+    recordedBy: v.id("users"),
+    status: v.union(v.literal("pending"), v.literal("verified"), v.literal("disputed")),
+    verifiedBy: v.optional(v.id("users")),
+    verifiedAt: v.optional(v.string()),
+    note: v.optional(v.string()),
+  })
+    .index("by_branch", ["branchId"])
+    .index("by_staff", ["staffId"])
+    .index("by_recorded_at", ["recordedAt"]),
+
+  // Immutable reconciliation decisions: append new records rather than overwrite history.
+  collection_reconciliation_events: defineTable({
+    branchId: v.id("branches"),
+    paymentId: v.optional(v.id("payments")),
+    handoverId: v.optional(v.id("collection_handovers")),
+    action: v.union(v.literal("verify"), v.literal("dispute"), v.literal("correct")),
+    note: v.string(),
+    actorId: v.id("users"),
+    occurredAt: v.string(),
+  })
+    .index("by_branch", ["branchId"])
+    .index("by_payment", ["paymentId"])
+    .index("by_handover", ["handoverId"]),
 
   // End-of-day reports submitted by branch secretaries
   eod_reports: defineTable({
