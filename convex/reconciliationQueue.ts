@@ -20,7 +20,7 @@ export const list = query({
           paymentMethod: p.paymentMethod, externalReference: p.externalReference,
           receiptNumber: p.receiptNumber, reconciliationStatus: p.reconciliationStatus ?? "pending",
         })),
-      handovers: handovers.filter(h => h.recordedAt.startsWith(args.date)),
+      handovers: handovers.filter(h => h.collectionDate === args.date || (!h.collectionDate && h.recordedAt.startsWith(args.date))),
     };
   },
 });
