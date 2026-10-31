@@ -1,0 +1,45 @@
+name: Deploy BESTBRYT Convex development backend
+on:
+  push:
+    branches:
+      - security/payment-reconciliation-audit-2026-10
+    paths:
+      - ".github/workflows/convex-development-preflight.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-development:
+    if: github.ref == 'refs/heads/security/payment-reconciliation-audit-2026-10'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm run build
+      - name: Validate development-only deployment key
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEV_DEPLOY_KEY }}
+        run: |
+          if [ -z "$CONVEX_DEPLOY_KEY" ]; then
+            echo "::error::Missing CONVEX_DEV_DEPLOY_KEY"
+            exit 1
+          fi
+          case "$CONVEX_DEPLOY_KEY" in
+            dev:acoustic-meerkat-220\|*) echo "Development deployment target verified" ;;
+            *) echo "::error::Key is not for the expected BESTBRYT development deployment"; exit 1 ;;
+          esac
+      - name: Deploy to Convex development only
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEV_DEPLOY_KEY }}
+        run: pnpm exec convex deploy --typecheck enable

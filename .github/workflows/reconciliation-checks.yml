@@ -1,0 +1,35 @@
+name: Reconciliation branch checks
+on:
+  push:
+    branches:
+      - security/payment-reconciliation-audit-2026-10
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck and build
+        run: pnpm run build
+      - name: Lint reconciliation changes
+        run: pnpm exec eslint convex/collectionReconciliation.ts convex/reconciliationQueue.ts src/pages/handovers/page.tsx src/pages/reconciliation/page.tsx --max-warnings=0
+      - name: Full repository lint (known debt, non-blocking)
+        continue-on-error: true
+        run: pnpm run lint
+      - name: Unit tests
+        run: pnpm test

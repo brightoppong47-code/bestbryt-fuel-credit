@@ -19,6 +19,8 @@ import {
   ShieldAlert,
   ClipboardCheck,
   MessageSquare,
+  ShieldCheck,
+  HandCoins,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils.ts";
@@ -41,6 +43,8 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { to: "/risk", label: "Risk Manager", icon: ShieldAlert, roles: ["owner", "risk_manager"] },
   { to: "/messages", label: "Messages", icon: MessageSquare, roles: ["owner", "staff"] },
   { to: "/reports", label: "Reports", icon: ClipboardList, roles: ["owner", "staff"] },
+  { to: "/reconciliation", label: "Reconciliation", icon: ShieldCheck, roles: ["owner"] },
+  { to: "/handovers", label: "Handovers", icon: HandCoins, roles: ["owner", "staff", "branch_secretary"] },
   { to: "/settings", label: "Settings", icon: Settings, roles: ["owner"] },
 ];
 
