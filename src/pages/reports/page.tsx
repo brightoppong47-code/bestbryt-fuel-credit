@@ -1,4 +1,5 @@
 import CollectionsReport from "./_components/CollectionsReport.tsx";
+import ReconciliationReport from "./_components/ReconciliationReport.tsx";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import { Authenticated } from "convex/react";
@@ -302,6 +303,7 @@ class ReportErrorBoundary extends Component<
 function ReportsInner() {
   return <div className="p-4 md:p-6 space-y-6 pb-10">
     <ReportErrorBoundary title="Collections report"><CollectionsReport /></ReportErrorBoundary>
+    <ReportErrorBoundary title="Reconciliation report"><ReconciliationReport /></ReportErrorBoundary>
     <div><h2 className="text-base font-bold mb-3">Submitted branch end-of-day reports</h2>
       <p className="text-xs text-muted-foreground mb-3">Previously submitted snapshots across branches. The collection filters above do not change these historical submissions.</p><ReportErrorBoundary title="End-of-day reports"><EodReportsSection /></ReportErrorBoundary></div>
     <div><h2 className="text-base font-bold mb-3">Current outstanding balances</h2>
