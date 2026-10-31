@@ -29,3 +29,18 @@ it("rejects absent configuration without a network call and detects provider rej
   fetcher.mockResolvedValue({ ok: true, json: async () => ({ status: "error", code: "1000" }) });
   expect((await submitMnotifySms("0241234567", "Test")).status).toBe("failed");
 });
+
+it("shows safe response codes without exposing provider text", async () => {
+  vi.stubEnv("MNOTIFY_API_KEY", "test-secret"); vi.stubEnv("MNOTIFY_SENDER_ID", "BESTBRYT");
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ status: "error", code: "1000", message: "key=test-secret" }) }));
+  const result = await submitMnotifySms("0241234567", "Test");
+  expect(result.status).toBe("failed"); expect(result.error).toContain("1000 (HTTP 200)");
+  expect(JSON.stringify(result)).not.toContain("test-secret");
+});
+it("keeps an unfamiliar successful HTTP response unconfirmed to avoid duplicate sends", async () => {
+  vi.stubEnv("MNOTIFY_API_KEY", "test-secret"); vi.stubEnv("MNOTIFY_SENDER_ID", "BESTBRYT");
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ code: "new-response", message: "key=test-secret" }) }));
+  const result = await submitMnotifySms("0241234567", "Test");
+  expect(result.status).toBe("unknown"); expect(result.error).toContain("campaign history");
+  expect(JSON.stringify(result)).not.toContain("test-secret");
+});

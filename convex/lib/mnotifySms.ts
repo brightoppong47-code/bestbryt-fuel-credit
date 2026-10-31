@@ -21,8 +21,15 @@ export async function submitMnotifySms(to: string, body: string): Promise<SmsSub
       if (result.summary?.total_rejected > 0 || result.summary?.total_sent === 0) return { success: false, status: "failed", error: "BMS rejected this SMS. Check your sender approval, recipient and credits." };
       return { success: true, status: "submitted", sid: typeof result.summary?._id === "string" ? result.summary._id : undefined };
     }
+    // Only expose bounded numeric codes, never provider text that might echo credentials.
+    const code = /^\d{3,6}$/.test(String(result?.code)) ? String(result.code) : "unavailable";
+    const http = Number.isInteger(response.status) ? String(response.status) : "unavailable";
+    const diagnostic = `BMS response code ${code} (HTTP ${http}).`;
     if (response.status >= 500) return { success: false, status: "unknown", error: "BMS returned a server error. Check BMS campaign history before attempting another send." };
-    return { success: false, status: "failed", error: "BMS did not accept the SMS. Check your API key status, credit limit, approved sender ID and account credits." };
+    if (result?.status === "error" || result?.status === "failed" || (response.status >= 400 && response.status < 500)) {
+      return { success: false, status: "failed", error: `${diagnostic} BMS rejected the request. Check the API key is active, its SMS credit limit, the approved sender ID and available SMS credits. Give BMS support this response code if these settings are correct.` };
+    }
+    return { success: false, status: "unknown", error: `${diagnostic} SMS acceptance could not be confirmed. Check BMS campaign history before attempting another send.` };
   } catch {
     // Never expose provider exceptions: they may contain the API key in the URL.
     return { success: false, status: "unknown", error: "SMS submission could not be confirmed. Check BMS campaign history before attempting another send. Do not retry automatically." };
