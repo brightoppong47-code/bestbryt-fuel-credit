@@ -5,6 +5,8 @@ import { ConvexError } from "convex/values";
 import { internalAction, action } from "./_generated/server";
 import { internal, api } from "./_generated/api";
 import Twilio from "twilio";
+import { submitMnotifySms, ghanaSmsPhone } from "./lib/mnotifySms";
+import { buildMessageDraft } from "./lib/messageDraft";
 
 // ─── Twilio helpers ───────────────────────────────────────────────────────────
 
@@ -53,6 +55,7 @@ async function sendTwilioMessage(
   body: string,
   channel: "sms" | "whatsapp",
 ): Promise<{ success: boolean; sid?: string; error?: string }> {
+  if (channel === "sms") return await submitMnotifySms(to, body);
   const client = getTwilioClient();
   const from = getSender(channel);
   const toFormatted = channel === "whatsapp" ? `whatsapp:${to}` : to;
@@ -166,5 +169,32 @@ export const sendBroadcast = action({
     }
 
     return { sent, failed, errors };
+  },
+});
+
+/** One reviewed customer SMS. No customer list or free-form recipient is trusted from the browser. */
+export const sendCustomerSms = action({
+  args: { driverId: v.id("drivers"), kind: v.union(v.literal("balance"), v.literal("general")), generalMessage: v.optional(v.string()), expectedBody: v.string(), expectedPhone: v.string(), requestId: v.string() },
+  handler: async (ctx, args): Promise<{ success: boolean; status: string; error?: string }> => {
+    const user = await ctx.runQuery(api.users.getCurrentUserData, {});
+    if (!user || !["owner", "staff", "branch_secretary"].includes(user.role)) throw new Error("Messaging access required");
+    if (args.kind === "general" && user.role !== "owner") throw new Error("Only admin can send general messages");
+    if (!/^[a-zA-Z0-9-]{16,80}$/.test(args.requestId)) throw new Error("Invalid send request");
+    const config = await ctx.runQuery(api.messaging_internal.smsConfiguration, {});
+    if (!config.configured) throw new Error("mNotify SMS is not configured");
+    const driver = await ctx.runQuery(api.drivers.getDriver, { driverId: args.driverId });
+    if (!driver?.isActive) throw new Error("Customer is inactive, unavailable or outside your assigned branch");
+    const phone = ghanaSmsPhone(driver.phone);
+    if (phone !== ghanaSmsPhone(args.expectedPhone)) throw new Error("Customer phone changed. Refresh and review again.");
+    if ((args.generalMessage?.length ?? 0) > 1000) throw new Error("General messages must be at most 1000 characters");
+    const balance = args.kind === "balance" ? await ctx.runQuery(api.transactions.getDriverBalance, { driverId: args.driverId }) : null;
+    if (balance && balance.totalOwed <= 0) throw new Error("No outstanding balance. No reminder is needed.");
+    const body = buildMessageDraft(driver, args.kind, args.generalMessage ?? "", balance?.totalOwed);
+    if (!body || body !== args.expectedBody) throw new Error("Message or balance changed. Refresh and review the new preview before sending.");
+    const claim = await ctx.runMutation(internal.messaging_internal.claimSmsSubmission, { driverId: args.driverId, phone, body, requestId: args.requestId, messageType: args.kind === "balance" ? "balance_due" : "broadcast" });
+    if (!claim.claimed) return { success: claim.status === "submitted", status: claim.status, error: claim.status === "submitted" ? undefined : "This request was already processed or is unresolved. Check message history before sending again." };
+    const result = await submitMnotifySms(phone, body);
+    await ctx.runMutation(internal.messaging_internal.finishSmsSubmission, { logId: claim.logId, success: result.success, status: result.status, providerId: result.sid, error: result.error });
+    return result;
   },
 });

@@ -226,10 +226,16 @@ export default defineSchema({
     success: v.boolean(),
     error: v.optional(v.string()),
     sentAt: v.string(),
+    requestId: v.optional(v.string()),
+    sentBy: v.optional(v.id("users")),
+    provider: v.optional(v.string()),
+    providerId: v.optional(v.string()),
+    submissionStatus: v.optional(v.union(v.literal("submitting"), v.literal("submitted"), v.literal("failed"), v.literal("unknown"))),
   })
     .index("by_driver", ["driverId"])
     .index("by_transaction", ["transactionId"])
-    .index("by_sent_at", ["sentAt"]),
+    .index("by_sent_at", ["sentAt"])
+    .index("by_request_id", ["requestId"]),
   // Global app settings — single document, keyed by "global"
   app_settings: defineTable({
     key: v.string(),              // always "global"

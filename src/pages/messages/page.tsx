@@ -27,6 +27,9 @@ function LogRow({ log }: {
     error?: string;
     sentAt: string;
     body: string;
+    submissionStatus?: string;
+    provider?: string;
+    providerId?: string;
   };
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -46,7 +49,7 @@ function LogRow({ log }: {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="secondary" className="text-xs">{log.channel === "sms" ? "📱 SMS" : "💬 WhatsApp"}</Badge>
-            <span className="text-xs font-medium">{MSG_TYPE_LABELS[log.messageType] ?? log.messageType}</span>
+            <span className="text-xs font-medium">{log.submissionStatus ?? (log.success ? "Legacy accepted" : "Legacy failed")} · {MSG_TYPE_LABELS[log.messageType] ?? log.messageType}</span>
             <span className="text-xs text-muted-foreground font-mono">{log.phone}</span>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -57,6 +60,7 @@ function LogRow({ log }: {
       {expanded && (
         <div className="mt-2 ml-10 text-xs bg-muted rounded-lg p-2.5 whitespace-pre-wrap">
           {log.body}
+          {log.providerId && <p className="mt-1">BMS campaign: {log.providerId}</p>}
           {!log.success && log.error && (
             <p className="mt-1 text-destructive">Error: {log.error}</p>
           )}
@@ -82,10 +86,7 @@ function MessagesInner() {
           </h1>
           <p className="text-muted-foreground text-sm mt-0.5">SMS & WhatsApp alerts to drivers</p>
         </div>
-        <Button disabled title="Sending pending Twilio activation" className="gap-2 shrink-0">
-          <Send className="w-4 h-4" />
-          Sending pending
-        </Button>
+
       </div>
 
       <Tabs defaultValue="prepare" className="gap-4">
@@ -97,7 +98,7 @@ function MessagesInner() {
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             <Clock className="w-4 h-4 text-primary" />
-            Recent Messages
+            Message submissions (not delivery confirmations)
           </CardTitle>
         </CardHeader>
         {logs === undefined ? (
