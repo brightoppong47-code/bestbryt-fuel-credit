@@ -9,6 +9,7 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Button } from "@/components/ui/button.tsx";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
@@ -302,14 +303,25 @@ class ReportErrorBoundary extends Component<
 }
 
 function ReportsInner() {
-  return <div className="p-4 md:p-6 space-y-6 pb-10">
-    <ReportErrorBoundary title="Collections report"><CollectionsReport /></ReportErrorBoundary>
-    <ReportErrorBoundary title="Customer purchase report"><CustomerPurchasesReport /></ReportErrorBoundary>
-    <ReportErrorBoundary title="Reconciliation report"><ReconciliationReport /></ReportErrorBoundary>
-    <div><h2 className="text-base font-bold mb-3">Submitted branch end-of-day reports</h2>
-      <p className="text-xs text-muted-foreground mb-3">Previously submitted snapshots across branches. The collection filters above do not change these historical submissions.</p><ReportErrorBoundary title="End-of-day reports"><EodReportsSection /></ReportErrorBoundary></div>
-    <div><h2 className="text-base font-bold mb-3">Current outstanding balances</h2>
-      <p className="text-xs text-muted-foreground mb-3">Current unpaid balances across accessible branches, independent of the collection date range.</p><ReportErrorBoundary title="Outstanding balances"><OutstandingList /></ReportErrorBoundary></div>
+  const user = useQuery(api.users.getCurrentUserData);
+  return <div className="p-4 md:p-6 space-y-4 pb-10">
+    <div><h1 className="text-xl font-bold">Reports</h1><p className="text-sm text-muted-foreground">Choose a section below to view or print its report.</p></div>
+    <Tabs defaultValue="collections" className="gap-4">
+      <TabsList aria-label="Report sections" className="grid w-full grid-cols-2 gap-1 !h-auto p-1.5 md:flex md:flex-wrap md:justify-start">
+        <TabsTrigger value="collections" className="min-h-12 whitespace-normal text-center md:min-h-10">Collections</TabsTrigger>
+        <TabsTrigger value="customers" className="min-h-12 whitespace-normal text-center md:min-h-10">Customer purchases</TabsTrigger>
+        {user?.role === "owner" && <TabsTrigger value="reconciliation" className="min-h-12 whitespace-normal text-center md:min-h-10">Reconciliation</TabsTrigger>}
+        <TabsTrigger value="eod" className="min-h-12 whitespace-normal text-center md:min-h-10">End-of-day reports</TabsTrigger>
+        <TabsTrigger value="outstanding" className="min-h-12 whitespace-normal text-center md:min-h-10">Outstanding balances</TabsTrigger>
+      </TabsList>
+      <TabsContent value="collections" forceMount className="data-[state=inactive]:hidden"><ReportErrorBoundary title="Collections report"><CollectionsReport /></ReportErrorBoundary></TabsContent>
+      <TabsContent value="customers" forceMount className="data-[state=inactive]:hidden"><ReportErrorBoundary title="Customer purchase report"><CustomerPurchasesReport /></ReportErrorBoundary></TabsContent>
+      {user?.role === "owner" && <TabsContent value="reconciliation" forceMount className="data-[state=inactive]:hidden"><ReportErrorBoundary title="Reconciliation report"><ReconciliationReport /></ReportErrorBoundary></TabsContent>}
+      <TabsContent value="eod" forceMount className="data-[state=inactive]:hidden"><h2 className="text-base font-bold mb-3">Submitted branch end-of-day reports</h2>
+        <p className="text-xs text-muted-foreground mb-3">Previously submitted snapshots across branches. Collection filters do not change these historical submissions.</p><ReportErrorBoundary title="End-of-day reports"><EodReportsSection /></ReportErrorBoundary></TabsContent>
+      <TabsContent value="outstanding" forceMount className="data-[state=inactive]:hidden"><h2 className="text-base font-bold mb-3">Current outstanding balances</h2>
+        <p className="text-xs text-muted-foreground mb-3">Current unpaid balances across accessible branches, independent of the collection date range.</p><ReportErrorBoundary title="Outstanding balances"><OutstandingList /></ReportErrorBoundary></TabsContent>
+    </Tabs>
   </div>;
 }
 
