@@ -1,0 +1,43 @@
+name: Build BESTBRYT isolated testing website
+on:
+  push:
+    branches:
+      - security/payment-reconciliation-audit-2026-10
+    paths:
+      - ".github/workflows/build-development-website.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-test-site:
+    if: github.ref == 'refs/heads/security/payment-reconciliation-audit-2026-10'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - name: Build isolated development website
+        env:
+          VITE_BASE_PATH: /bestbryt-fuel-credit-test/
+          VITE_CONVEX_URL: https://acoustic-meerkat-220.convex.cloud
+          VITE_HERCULES_OIDC_AUTHORITY: ${{ secrets.VITE_HERCULES_OIDC_AUTHORITY }}
+          VITE_HERCULES_OIDC_CLIENT_ID: ${{ secrets.VITE_HERCULES_OIDC_CLIENT_ID }}
+          VITE_HERCULES_WEBSITE_ID: 01M0CT57Y07T916YEXC6GKE4QR
+        run: |
+          test -n "$VITE_HERCULES_OIDC_AUTHORITY"
+          test -n "$VITE_HERCULES_OIDC_CLIENT_ID"
+          pnpm build
+          cp dist/index.html dist/404.html
+      - name: Store test site artifact (not published)
+        uses: actions/upload-artifact@v4
+        with:
+          name: bestbryt-development-website
+          path: dist/
+          retention-days: 7
