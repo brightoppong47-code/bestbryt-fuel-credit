@@ -1,0 +1,44 @@
+import { penaltyDays } from "./penaltyDays";
+
+export type AdjustableCredit = {
+  fuelAmountGhs: number;
+  interestGhs: number;
+  interestCollectedUpfront?: boolean;
+  totalOwedGhs: number;
+  dueAt: string;
+  status: "pending" | "overdue" | "paid";
+  penaltyGhs: number;
+  principalAdjustmentGhs?: number;
+  interestAdjustmentGhs?: number;
+  penaltyAdjustmentGhs?: number;
+  penaltyWaivedThrough?: string;
+  amountPaidGhs?: number;
+};
+
+const money = (n: number) => Math.round(n * 100) / 100;
+
+/** Shared pure calculator. Penalty waivers through a date suppress only the
+ * chargeable days already accrued by that date; later days can still accrue.
+ * No historical payment row is changed by this calculation.
+ */
+export function adjustedBalance(tx: AdjustableCredit, now: Date, penaltyRate = 0.05) {
+  const principal = money(tx.fuelAmountGhs + (tx.principalAdjustmentGhs ?? 0));
+  const interest = money(tx.interestGhs + (tx.interestAdjustmentGhs ?? 0));
+  const base = money(principal + (tx.interestCollectedUpfront ? 0 : interest));
+  const chargeableDays = penaltyDays(tx.dueAt, now);
+  const waivedDays = tx.penaltyWaivedThrough
+    ? Math.min(chargeableDays, penaltyDays(tx.dueAt, new Date(tx.penaltyWaivedThrough)))
+    : 0;
+  const automaticPenalty = tx.status === "paid"
+    ? tx.penaltyGhs
+    : money(base * penaltyRate * Math.max(0, chargeableDays - waivedDays));
+  const penalty = money(automaticPenalty + (tx.penaltyAdjustmentGhs ?? 0));
+  const total = money(base + penalty);
+  const paid = money(tx.amountPaidGhs ?? 0);
+  return {
+    principal, interest, base, automaticPenalty, penalty,
+    total, paid, remaining: money(Math.max(0, total - paid)),
+    valid: [principal, interest, penalty, total, paid].every(Number.isFinite)
+      && principal >= 0 && interest >= 0 && penalty >= 0 && total >= paid,
+  };
+}
