@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireOwner } from "./helpers";
+import { adjustedBalance } from "./lib/adjustedBalance";
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
@@ -20,7 +21,7 @@ export const adjust = mutation({
     const tx = await ctx.db.get(args.transactionId);
     if (!tx) throw new ConvexError({ code: "NOT_FOUND", message: "Transaction not found" });
     if (tx.status === "paid") throw new ConvexError({ code: "CONFLICT", message: "Paid transactions require a separate correction workflow" });
-    if (!Number.isFinite(args.deltaGhs) || !Number.isSafeInteger(args.deltaGhs * 100) || Math.abs(args.deltaGhs) > 1000000 || args.deltaGhs === 0) {
+    if (!Number.isFinite(args.deltaGhs) || Math.abs(args.deltaGhs * 100 - Math.round(args.deltaGhs * 100)) > 1e-7 || Math.abs(args.deltaGhs) > 1000000 || args.deltaGhs === 0) {
       throw new ConvexError({ code: "BAD_REQUEST", message: "Enter a nonzero adjustment in whole pesewas" });
     }
     const reason = args.reason.trim();
@@ -29,12 +30,11 @@ export const adjust = mutation({
     const field = args.component === "principal" ? "principalAdjustmentGhs" : args.component === "interest" ? "interestAdjustmentGhs" : "penaltyAdjustmentGhs";
     const old = tx[field] ?? 0;
     const next = round(old + args.deltaGhs);
-    const principal = round(tx.fuelAmountGhs + (args.component === "principal" ? next : tx.principalAdjustmentGhs ?? 0));
-    const interest = round(tx.interestGhs + (args.component === "interest" ? next : tx.interestAdjustmentGhs ?? 0));
-    const penalty = round(tx.penaltyGhs + (args.component === "penalty" ? next : tx.penaltyAdjustmentGhs ?? 0));
-    if (principal < 0 || interest < 0 || penalty < 0) throw new ConvexError({ code: "BAD_REQUEST", message: "Adjusted component cannot be negative" });
-    const payable = round(principal + (tx.interestCollectedUpfront ? 0 : interest) + penalty);
-    if (payable < (tx.amountPaidGhs ?? 0)) throw new ConvexError({ code: "BAD_REQUEST", message: "Adjustment cannot reduce debt below payments already recorded" });
+    const proposed = { ...tx, [field]: next };
+    const balance = adjustedBalance(proposed, new Date());
+    if (!balance.valid) {
+      throw new ConvexError({ code: "BAD_REQUEST", message: "Adjustment would create a negative charge or reduce the debt below recorded payments" });
+    }
 
     await ctx.db.patch(tx._id, { [field]: next });
     await ctx.db.insert("transaction_adjustments", {
