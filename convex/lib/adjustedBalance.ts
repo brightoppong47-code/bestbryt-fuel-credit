@@ -32,7 +32,10 @@ export function adjustedBalance(tx: AdjustableCredit, now: Date, penaltyRate = 0
   const automaticPenalty = tx.status === "paid"
     ? tx.penaltyGhs
     : money(base * penaltyRate * Math.max(0, chargeableDays - waivedDays));
-  const penalty = money(automaticPenalty + (tx.penaltyAdjustmentGhs ?? 0));
+  // A paid transaction stores the final settled penalty, including adjustments.
+  const penalty = tx.status === "paid"
+    ? money(tx.penaltyGhs)
+    : money(automaticPenalty + (tx.penaltyAdjustmentGhs ?? 0));
   const total = money(base + penalty);
   const paid = money(tx.amountPaidGhs ?? 0);
   return {
