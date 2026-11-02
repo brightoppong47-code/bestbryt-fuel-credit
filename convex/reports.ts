@@ -1,7 +1,7 @@
 import { assignedBranchIds, canAccessBranch, isBranchStaff } from "./helpers";
 import { ConvexError, v } from "convex/values";
 import { query } from "./_generated/server";
-import { requireStaff } from "./helpers";
+import { requireStaff, requireOwner } from "./helpers";
 import { allocatePayment } from "./lib/paymentAllocation";
 
 export const collections = query({
@@ -75,7 +75,6 @@ export const collections = query({
 export const adjustmentAudit = query({
   args: { fromDate: v.string(), toDate: v.string() },
   handler: async (ctx, args) => {
-    const { requireOwner } = await import("./helpers");
     await requireOwner(ctx);
     const valid = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s)) && new Date(s).toISOString().slice(0, 10) === s;
     if (!valid(args.fromDate) || !valid(args.toDate) || args.fromDate > args.toDate) {
