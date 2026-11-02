@@ -77,7 +77,7 @@ export const adjustmentAudit = query({
   handler: async (ctx, args) => {
     const { requireOwner } = await import("./helpers");
     await requireOwner(ctx);
-    const valid = (s: string) => /^\\d{4}-\\d{2}-\\d{2}$/.test(s) && !Number.isNaN(Date.parse(s)) && new Date(s).toISOString().slice(0, 10) === s;
+    const valid = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s)) && new Date(s).toISOString().slice(0, 10) === s;
     if (!valid(args.fromDate) || !valid(args.toDate) || args.fromDate > args.toDate) {
       throw new ConvexError({ code: "BAD_REQUEST", message: "Choose a valid date range" });
     }
