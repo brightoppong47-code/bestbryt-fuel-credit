@@ -5,6 +5,10 @@ on:
       - security/payment-reconciliation-audit-2026-10
     paths:
       - ".github/workflows/build-development-website.yml"
+      - "convex/**"
+      - "src/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
   workflow_dispatch:
 permissions:
   contents: read
