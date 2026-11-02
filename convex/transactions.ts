@@ -410,8 +410,8 @@ export const getDriverBalance = query({
     for (const tx of txs) {
       if (tx.status === "paid") { paidCount++; continue; }
       const days = overdueDays(tx.dueAt, now);
-      const penalty = days > 0 ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100 : 0;
-      const remaining = Math.max(0, (tx.totalOwedGhs + penalty) - (tx.amountPaidGhs ?? 0));
+      const balance = adjustedBalance(tx, now, PENALTY_RATE);
+      const remaining = balance.remaining;
       totalOwed += remaining;
       if (days > 0) overdueCount++;
       else pendingCount++;
@@ -451,8 +451,8 @@ export const getDashboardStats = query({
     let overdueCount = 0;
     for (const tx of open) {
       const days = overdueDays(tx.dueAt, now);
-      const penalty = days > 0 ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100 : 0;
-      const remaining = Math.max(0, (tx.totalOwedGhs + penalty) - (tx.amountPaidGhs ?? 0));
+      const balance = adjustedBalance(tx, now, PENALTY_RATE);
+      const remaining = balance.remaining;
       totalOutstandingGhs += remaining;
       if (days > 0) overdueCount++;
     }
