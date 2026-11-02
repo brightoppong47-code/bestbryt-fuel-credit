@@ -135,11 +135,10 @@ export const markPaid = mutation({
       throw new ConvexError({ message: "Payment reference is too long", code: "BAD_REQUEST" });
     const now = new Date();
     const days = overdueDays(tx.dueAt, now);
-    const penaltyGhs =
-      days > 0
-        ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100
-        : 0;
-    const liveTotal = Math.round((tx.totalOwedGhs + penaltyGhs) * 100) / 100;
+    const balance = adjustedBalance(tx, now, PENALTY_RATE);
+    if (!balance.valid) throw new ConvexError({ message: "Invalid adjusted balance; owner review required", code: "CONFLICT" });
+    const penaltyGhs = balance.penalty;
+    const liveTotal = balance.total;
     const existingPaid = tx.amountPaidGhs ?? 0;
     const remaining = Math.max(0, Math.round((liveTotal - existingPaid) * 100) / 100);
 
@@ -194,10 +193,10 @@ export const recordPayment = mutation({
       throw new ConvexError({ message: "Payment reference is too long", code: "BAD_REQUEST" });
     const now = new Date();
     const days = overdueDays(tx.dueAt, now);
-    const penaltyGhs = days > 0
-      ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100
-      : 0;
-    const liveTotal = Math.round((tx.totalOwedGhs + penaltyGhs) * 100) / 100;
+    const balance = adjustedBalance(tx, now, PENALTY_RATE);
+    if (!balance.valid) throw new ConvexError({ message: "Invalid adjusted balance; owner review required", code: "CONFLICT" });
+    const penaltyGhs = balance.penalty;
+    const liveTotal = balance.total;
     const existingPaid = tx.amountPaidGhs ?? 0;
     if (Math.round(args.amountGhs * 100) > Math.round((liveTotal - existingPaid) * 100)) {
       throw new ConvexError({ message: "Payment exceeds the remaining balance", code: "BAD_REQUEST" });
