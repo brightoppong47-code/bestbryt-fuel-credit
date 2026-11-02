@@ -1,5 +1,6 @@
 import { assignedBranchIds, canAccessBranch, isBranchStaff, assertDriverAccess, assertTransactionAccess, accessibleDriverIds } from "./helpers";
 import { penaltyDays } from "./lib/penaltyDays";
+import { adjustedBalance } from "./lib/adjustedBalance";
 import { allocatePayment } from "./lib/paymentAllocation";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
@@ -335,11 +336,9 @@ export const listTransactions = query({
 
         const now = new Date();
         const days = tx.status !== "paid" ? overdueDays(tx.dueAt, now) : 0;
-        const livePenalty =
-          days > 0
-            ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100
-            : tx.penaltyGhs;
-        const liveTotal = Math.round((tx.totalOwedGhs + livePenalty) * 100) / 100;
+        const adjusted = adjustedBalance(tx, now, PENALTY_RATE);
+        const livePenalty = adjusted.penalty;
+        const liveTotal = adjusted.total;
         const liveStatus: "pending" | "paid" | "overdue" =
           tx.status === "paid" ? "paid" : days > 0 ? "overdue" : "pending";
 
@@ -370,11 +369,9 @@ export const getTransaction = query({
     const driver = await ctx.db.get(tx.driverId);
     const now = new Date();
     const days = tx.status !== "paid" ? overdueDays(tx.dueAt, now) : 0;
-    const livePenalty =
-      days > 0
-        ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100
-        : tx.penaltyGhs;
-    const liveTotal = Math.round((tx.totalOwedGhs + livePenalty) * 100) / 100;
+    const adjusted = adjustedBalance(tx, now, PENALTY_RATE);
+    const livePenalty = adjusted.penalty;
+    const liveTotal = adjusted.total;
     const liveStatus: "pending" | "paid" | "overdue" =
       tx.status === "paid" ? "paid" : days > 0 ? "overdue" : "pending";
     return {
@@ -384,7 +381,7 @@ export const getTransaction = query({
       liveStatus,
       overdueDays: days,
       amountPaidGhs: tx.amountPaidGhs ?? 0,
-      remainingGhs: Math.max(0, Math.round((liveTotal - (tx.amountPaidGhs ?? 0)) * 100) / 100),
+      remainingGhs: adjusted.remaining,
       driver,
     };
   },
