@@ -13,6 +13,8 @@ export type AdjustableCredit = {
   penaltyAdjustmentGhs?: number;
   penaltyWaivedThrough?: string;
   amountPaidGhs?: number;
+  penaltyPausedAt?: string;
+  penaltyPausedUntil?: string;
 };
 
 const money = (n: number) => Math.round(n * 100) / 100;
@@ -29,9 +31,15 @@ export function adjustedBalance(tx: AdjustableCredit, now: Date, penaltyRate = 0
   const waivedDays = tx.penaltyWaivedThrough
     ? Math.min(chargeableDays, penaltyDays(tx.dueAt, new Date(tx.penaltyWaivedThrough)))
     : 0;
+  const pauseStart = tx.penaltyPausedAt ? new Date(tx.penaltyPausedAt) : undefined;
+  const pauseEnd = tx.penaltyPausedUntil ? new Date(tx.penaltyPausedUntil) : undefined;
+  const pauseValid = pauseStart && pauseEnd && Number.isFinite(pauseStart.getTime()) && Number.isFinite(pauseEnd.getTime()) && pauseEnd > pauseStart;
+  const pausedThrough = pauseValid ? new Date(Math.min(now.getTime(), pauseEnd!.getTime())) : undefined;
+  const pausedDays = pausedThrough && pausedThrough > pauseStart!
+    ? Math.max(0, penaltyDays(tx.dueAt, pausedThrough) - penaltyDays(tx.dueAt, pauseStart!)) : 0;
   const automaticPenalty = tx.status === "paid"
     ? tx.penaltyGhs
-    : money(base * penaltyRate * Math.max(0, chargeableDays - waivedDays));
+    : money(base * penaltyRate * Math.max(0, chargeableDays - waivedDays - pausedDays));
   // A paid transaction stores the final settled penalty, including adjustments.
   const penalty = tx.status === "paid"
     ? money(tx.penaltyGhs)
