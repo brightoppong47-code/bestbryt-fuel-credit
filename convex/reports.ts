@@ -1,7 +1,7 @@
 import { assignedBranchIds, canAccessBranch, isBranchStaff } from "./helpers";
 import { ConvexError, v } from "convex/values";
 import { query } from "./_generated/server";
-import { requireStaff } from "./helpers";
+import { requireStaff, requireOwner } from "./helpers";
 import { allocatePayment } from "./lib/paymentAllocation";
 
 export const collections = query({
@@ -67,5 +67,38 @@ export const collections = query({
       totals[key] = round(totals[key]); for (const d of daily.values()) d[key] = round(d[key]);
     }
     return { totals, daily: [...daily.values()].sort((a,b) => a.date.localeCompare(b.date)), rows: rows.sort((a,b) => b.date.localeCompare(a.date)) };
+  },
+});
+
+
+/** Owner-only financial adjustment audit report. Adjustments change debt, not cash collected. */
+export const adjustmentAudit = query({
+  args: { fromDate: v.string(), toDate: v.string() },
+  handler: async (ctx, args) => {
+    await requireOwner(ctx);
+    const valid = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s)) && new Date(s).toISOString().slice(0, 10) === s;
+    if (!valid(args.fromDate) || !valid(args.toDate) || args.fromDate > args.toDate) {
+      throw new ConvexError({ code: "BAD_REQUEST", message: "Choose a valid date range" });
+    }
+    const adjustments = await ctx.db.query("transaction_adjustments").collect();
+    const filtered = adjustments.filter(a => a.createdAt.slice(0, 10) >= args.fromDate && a.createdAt.slice(0, 10) <= args.toDate);
+    const rows = await Promise.all(filtered.map(async a => {
+      const [driver, actor] = await Promise.all([ctx.db.get(a.driverId), ctx.db.get(a.actorId)]);
+      return {
+        ...a,
+        customer: driver?.fullName ?? "Unknown customer",
+        actorName: actor?.name ?? "Unknown admin",
+      };
+    }));
+    const round = (n: number) => Math.round(n * 100) / 100;
+    return {
+      totals: {
+        principalGhs: round(filtered.filter(a => a.component === "principal").reduce((sum, a) => sum + a.deltaGhs, 0)),
+        interestGhs: round(filtered.filter(a => a.component === "interest").reduce((sum, a) => sum + a.deltaGhs, 0)),
+        penaltyGhs: round(filtered.filter(a => a.component === "penalty").reduce((sum, a) => sum + a.deltaGhs, 0)),
+        adjustmentsCount: filtered.length,
+      },
+      rows: rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    };
   },
 });
