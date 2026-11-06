@@ -44,7 +44,7 @@ describe("adjustedBalance", () => {
 // Regression guard: a future pause must not add penalties while active.
 describe("penalty pause regression", () => {
   it("does not accrue additional penalties during an active pause", () => {
-    const paused = { ...tx, penaltyPausedUntil: "2026-11-10T12:00:00.000Z" };
+    const paused = { ...tx, penaltyPausedAt: "2026-11-04T12:00:00.000Z", penaltyPausedUntil: "2026-11-10T12:00:00.000Z" };
     const first = adjustedBalance(paused, new Date("2026-11-04T12:00:00.000Z"));
     const later = adjustedBalance(paused, new Date("2026-11-06T12:00:00.000Z"));
     expect(later.penalty).toBe(first.penalty);
