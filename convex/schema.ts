@@ -125,6 +125,7 @@ export default defineSchema({
     lastPenaltyCalculatedAt: v.optional(v.string()),
     // Penalty pause: if set, no penalty accrues until this ISO timestamp
     penaltyPausedUntil: v.optional(v.string()),
+    penaltyPausedAt: v.optional(v.string()),
     penaltyPausedBy: v.optional(v.id("users")),
     penaltyPauseReason: v.optional(v.string()),
     // Payment tracking
