@@ -50,3 +50,15 @@ describe("penalty pause regression", () => {
     expect(later.penalty).toBe(first.penalty);
   });
 });
+
+describe("legacy pause compatibility", () => {
+  it("keeps previously stored penalties during a legacy pause without a start timestamp", () => {
+    const legacy = { ...tx, penaltyGhs: 8, penaltyPausedUntil: "2026-11-10T12:00:00.000Z" };
+    const balance = adjustedBalance(legacy, new Date("2026-11-06T12:00:00.000Z"));
+    expect(balance.penalty).toBe(8);
+  });
+  it("does not double-subtract days covered by both a waiver and a pause", () => {
+    const overlapping = { ...tx, penaltyWaivedThrough: "2026-11-04T12:00:00.000Z", penaltyPausedAt: "2026-11-03T12:00:00.000Z", penaltyPausedUntil: "2026-11-05T12:00:00.000Z" };
+    expect(adjustedBalance(overlapping, new Date("2026-11-06T12:00:00.000Z")).penalty).toBe(5.5);
+  });
+});
