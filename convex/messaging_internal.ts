@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internalQuery, internalMutation, query } from "./_generated/server";
-import { requireStaff, assertTransactionAccess, requireOwner } from "./helpers.ts";
+import { requireStaff, assertTransactionAccess, requireOwner, assertDriverAccess } from "./helpers.ts";
 
 // ─── Internal query: get transaction data for composing a message ─────────────
 
@@ -101,5 +101,35 @@ export const getRecentLogs = query({
       .query("message_logs")
       .order("desc")
       .take(100);
+  },
+});
+
+/** Only presence and sender label are exposed; API key values never reach the browser. */
+export const smsConfiguration = query({
+  args: {}, handler: async ctx => {
+    await requireStaff(ctx);
+    const sender = process.env.MNOTIFY_SENDER_ID?.trim() ?? "";
+    return { configured: !!process.env.MNOTIFY_API_KEY?.trim() && sender.length > 0 && sender.length <= 11, sender };
+  },
+});
+
+export const claimSmsSubmission = internalMutation({
+  args: { driverId: v.id("drivers"), requestId: v.string(), phone: v.string(), body: v.string(), messageType: v.union(v.literal("balance_due"), v.literal("broadcast")) },
+  handler: async (ctx, args) => {
+    const user = await requireStaff(ctx);
+    await assertDriverAccess(ctx, user, args.driverId);
+    const existing = await ctx.db.query("message_logs").withIndex("by_request_id", q => q.eq("requestId", args.requestId)).unique();
+    if (existing) {
+      if (existing.sentBy !== user._id || existing.driverId !== args.driverId || existing.body !== args.body || existing.phone !== args.phone) throw new Error("Request ID already used for a different message");
+      return { claimed: false, logId: existing._id, status: existing.submissionStatus ?? "unknown" };
+    }
+    const logId = await ctx.db.insert("message_logs", { ...args, channel: "sms", provider: "mnotify", sentBy: user._id, success: false, submissionStatus: "submitting", sentAt: new Date().toISOString() });
+    return { claimed: true, logId, status: "submitting" as const };
+  },
+});
+export const finishSmsSubmission = internalMutation({
+  args: { logId: v.id("message_logs"), success: v.boolean(), status: v.union(v.literal("submitted"), v.literal("failed"), v.literal("unknown")), providerId: v.optional(v.string()), error: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.logId, { success: args.success, submissionStatus: args.status, providerId: args.providerId, error: args.error });
   },
 });
