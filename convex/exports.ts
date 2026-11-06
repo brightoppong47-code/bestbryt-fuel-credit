@@ -317,3 +317,37 @@ export const collections = query({
     return { totals, branchCredits: creditSummary, daily: [...daily.values()].sort((a,b) => a.date.localeCompare(b.date)), rows: rows.sort((a,b) => b.date.localeCompare(a.date)) };
   },
 });
+
+/** One issued fuel credit is one purchase; repayments and handovers never add purchases. */
+export const customerPurchases = query({
+  args: { fromDate: v.string(), toDate: v.string(), branchId: v.optional(v.id("branches")) },
+  handler: async (ctx, args) => {
+    const user = await requireStaff(ctx);
+    const validDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s)) && new Date(s).toISOString().slice(0, 10) === s;
+    if (!validDate(args.fromDate) || !validDate(args.toDate) || args.fromDate > args.toDate) throw new Error("Choose a valid date range");
+    if (args.branchId && !canAccessBranch(user, args.branchId)) throw new Error("Access is restricted to your assigned branch");
+    const end = new Date(args.toDate); end.setUTCDate(end.getUTCDate() + 1);
+    const txs = await ctx.db.query("transactions").withIndex("by_issued_at", q => q.gte("issuedAt", args.fromDate).lt("issuedAt", end.toISOString().slice(0, 10))).order("desc").take(10001);
+    if (txs.length > 10000) throw new Error("Too many bills. Choose a shorter date range.");
+    const driverIds = [...new Set(txs.map(t => t.driverId))];
+    const drivers = new Map(await Promise.all(driverIds.map(async id => [id, await ctx.db.get(id)] as const)));
+    const branchIds = [...new Set([...drivers.values()].flatMap(d => d ? [d.branchId] : []))];
+    const branches = new Map(await Promise.all(branchIds.map(async id => [id, await ctx.db.get(id)] as const)));
+    const round = (n: number) => Math.round(n * 100) / 100;
+    return txs.filter(tx => {
+      const d = drivers.get(tx.driverId);
+      return d ? canAccessBranch(user, d.branchId) && (!args.branchId || d.branchId === args.branchId) : user.role === "owner" && !args.branchId;
+    }).map(tx => {
+      const d = drivers.get(tx.driverId);
+      return {
+        billId: tx._id, customerId: tx.driverId, customer: d?.fullName ?? "Unknown customer",
+        account: d?.accountNumber ?? "", branch: d ? branches.get(d.branchId)?.name ?? "Unknown branch" : "Unknown branch",
+        issuedAt: tx.issuedAt, dueAt: tx.dueAt, status: tx.status,
+        fuelGhs: tx.fuelAmountGhs, interestGhs: tx.interestGhs,
+        upfrontInterestGhs: tx.interestCollectedUpfront ? tx.interestGhs : 0,
+        recordedPenaltyGhs: tx.penaltyGhs, repaymentsGhs: tx.amountPaidGhs ?? 0,
+        recordedBalanceGhs: tx.status === "paid" ? 0 : Math.max(0, round(tx.totalOwedGhs + tx.penaltyGhs - (tx.amountPaidGhs ?? 0))),
+      };
+    });
+  },
+});
