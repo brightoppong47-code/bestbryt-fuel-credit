@@ -640,6 +640,7 @@ export const setPenaltyPause = mutation({
     }
     await ctx.db.patch(args.transactionId, {
       penaltyPausedUntil: pauseDate.toISOString(),
+      penaltyPausedAt: new Date().toISOString(),
       penaltyPausedBy: user._id,
       penaltyPauseReason: args.reason ?? undefined,
     });
@@ -659,6 +660,7 @@ export const clearPenaltyPause = mutation({
     if (!tx) throw new ConvexError({ message: "Transaction not found", code: "NOT_FOUND" });
     await ctx.db.patch(args.transactionId, {
       penaltyPausedUntil: undefined,
+      penaltyPausedAt: undefined,
       penaltyPausedBy: undefined,
       penaltyPauseReason: undefined,
     });
