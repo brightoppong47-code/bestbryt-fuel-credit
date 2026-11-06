@@ -1,0 +1,64 @@
+
+name: Publish BESTBRYT isolated test website
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish-test:
+    if: github.ref == 'refs/heads/security/payment-reconciliation-audit-2026-10'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout testing branch
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run automated tests
+        run: pnpm test
+
+      - name: Build development website
+        env:
+          VITE_BASE_PATH: /bestbryt-fuel-credit-test/
+          VITE_CONVEX_URL: https://acoustic-meerkat-220.convex.cloud
+          VITE_HERCULES_OIDC_AUTHORITY: ${{ secrets.VITE_HERCULES_OIDC_AUTHORITY }}
+          VITE_HERCULES_OIDC_CLIENT_ID: ${{ secrets.VITE_HERCULES_OIDC_CLIENT_ID }}
+          VITE_HERCULES_WEBSITE_ID: 01M0CT57Y07T916YEXC6GKE4QR
+        run: |
+          test -n "$VITE_HERCULES_OIDC_AUTHORITY"
+          test -n "$VITE_HERCULES_OIDC_CLIENT_ID"
+          pnpm build
+          cp dist/index.html dist/404.html
+          touch dist/.nojekyll
+
+      - name: Publish to testing repository
+        env:
+          TEST_TOKEN: ${{ secrets.BESTBRYT_TEST_REPO_TOKEN }}
+        run: |
+          test -n "$TEST_TOKEN"
+          cd dist
+          git init
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Publish isolated BESTBRYT test website"
+          git branch -M gh-pages
+          git remote add test https://github.com/brightoppong47-code/bestbryt-fuel-credit-test.git
+          AUTH_HEADER="$(printf 'x-access-token:%s' "$TEST_TOKEN" | base64 -w0)"
+          git -c http.extraheader="AUTHORIZATION: basic $AUTH_HEADER" push --force test gh-pages
