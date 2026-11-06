@@ -1,0 +1,34 @@
+name: Deploy BESTBRYT adjustments backend only
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: convex-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify intended release branch
+        run: |
+          test "$GITHUB_REF_NAME" = "release/admin-adjustments-main-compatible-2026-11"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - name: Verify production deployment target
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: |
+          node -e 'if (!process.env.CONVEX_DEPLOY_KEY?.startsWith("prod:blissful-hawk-149|")) throw new Error("Wrong production deploy key target")'
+      - name: Deploy backend (website is not deployed)
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: pnpm exec convex deploy --typecheck enable

@@ -115,11 +115,17 @@ export default defineSchema({
       v.literal("paid"),
       v.literal("overdue"),
     ),
+    // Owner adjustments are additive and preserve original issued amounts.
+    principalAdjustmentGhs: v.optional(v.number()),
+    interestAdjustmentGhs: v.optional(v.number()),
+    penaltyAdjustmentGhs: v.optional(v.number()),
+    penaltyWaivedThrough: v.optional(v.string()),
     // Penalties
     penaltyGhs: v.number(),
     lastPenaltyCalculatedAt: v.optional(v.string()),
     // Penalty pause: if set, no penalty accrues until this ISO timestamp
     penaltyPausedUntil: v.optional(v.string()),
+    penaltyPausedAt: v.optional(v.string()),
     penaltyPausedBy: v.optional(v.id("users")),
     penaltyPauseReason: v.optional(v.string()),
     // Payment tracking
@@ -132,6 +138,19 @@ export default defineSchema({
     .index("by_driver", ["driverId"])
     .index("by_status", ["status"])
     .index("by_issued_at", ["issuedAt"]),
+
+  // Append-only record of owner corrections; do not edit payment receipts.
+  transaction_adjustments: defineTable({
+    transactionId: v.id("transactions"),
+    driverId: v.id("drivers"),
+    component: v.union(v.literal("principal"), v.literal("interest"), v.literal("penalty")),
+    deltaGhs: v.number(),
+    previousAdjustmentTotalGhs: v.number(),
+    newAdjustmentTotalGhs: v.number(),
+    reason: v.string(),
+    actorId: v.id("users"),
+    createdAt: v.string(),
+  }).index("by_transaction", ["transactionId"]).index("by_created_at", ["createdAt"]),
 
   // Individual payment records (each partial or full payment on a transaction)
   payments: defineTable({

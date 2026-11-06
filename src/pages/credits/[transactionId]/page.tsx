@@ -38,6 +38,12 @@ export default function TransactionDetailPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [externalReference, setExternalReference] = useState("");
   const [loading, setLoading] = useState(false);
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [adjustComponent, setAdjustComponent] = useState<"principal" | "interest" | "penalty">("principal");
+  const [adjustDelta, setAdjustDelta] = useState("");
+  const [adjustReason, setAdjustReason] = useState("");
+  const [adjustSaving, setAdjustSaving] = useState(false);
+  const adjustTransaction = useMutation(api.transactionAdjustments.adjust);
 
   const markPaid = useMutation(api.transactions.markPaid);
   const recordPayment = useMutation(api.transactions.recordPayment);
@@ -68,6 +74,45 @@ export default function TransactionDetailPage() {
   );
 
   const currentUser = useQuery(api.users.getCurrentUserData);
+  const isOwner = currentUser?.role === "owner";
+  const adjustmentHistory = useQuery(
+    api.transactionAdjustments.history,
+    isOwner && transactionId ? { transactionId: transactionId as Id<"transactions"> } : "skip"
+  );
+
+  const handleAdjustment = async () => {
+    if (!transactionId || !isOwner || adjustSaving) return;
+    const delta = Number(adjustDelta);
+    if (!adjustDelta.trim() || !Number.isFinite(delta) || delta === 0 ||
+        Math.abs(delta * 100 - Math.round(delta * 100)) > 1e-7) {
+      toast.error("Enter a nonzero GHS amount with up to two decimal places.");
+      return;
+    }
+    if (adjustReason.trim().length < 10 || adjustReason.trim().length > 500) {
+      toast.error("Reason must contain 10 to 500 characters.");
+      return;
+    }
+    setAdjustSaving(true);
+    try {
+      await adjustTransaction({
+        transactionId: transactionId as Id<"transactions">,
+        component: adjustComponent,
+        deltaGhs: delta,
+        reason: adjustReason.trim(),
+      });
+      toast.success("Adjustment saved with audit history.");
+      setAdjustOpen(false);
+      setAdjustDelta("");
+      setAdjustReason("");
+    } catch (err) {
+      const message = err instanceof ConvexError
+        ? (err.data as { message?: string }).message
+        : undefined;
+      toast.error(message ?? "Adjustment failed. Please try again.");
+    } finally {
+      setAdjustSaving(false);
+    }
+  };
 
   const handleSendAlert = async (msgType: AlertType) => {
     if (!transactionId) return;
@@ -372,6 +417,82 @@ export default function TransactionDetailPage() {
           {tx.notes && <p className="text-sm text-muted-foreground border-t pt-3">{tx.notes}</p>}
         </CardContent>
       </Card>
+
+      {/* Owner-only financial adjustments. Backend also enforces owner role. */}
+      {isOwner && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-primary" />
+              Admin Adjustment
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Correct principal, interest or penalty. This changes debt, not cash received.
+              All corrections are recorded. Paid transactions cannot be adjusted here.
+            </p>
+            {!isPaid && (
+              <>
+                <Button variant="outline" onClick={() => setAdjustOpen(!adjustOpen)}>
+                  {adjustOpen ? "Cancel adjustment" : "Adjust transaction"}
+                </Button>
+                {adjustOpen && (
+                  <div className="space-y-3 rounded-lg border p-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="adjust-component">Charge to correct</Label>
+                      <select
+                        id="adjust-component"
+                        className="w-full rounded-md border bg-background p-2"
+                        value={adjustComponent}
+                        onChange={e => setAdjustComponent(e.target.value as typeof adjustComponent)}
+                      >
+                        <option value="principal">Fuel principal</option>
+                        <option value="interest">Interest</option>
+                        <option value="penalty">Penalty</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="adjust-delta">Change in GHS (negative reduces, positive increases)</Label>
+                      <Input id="adjust-delta" type="number" step="0.01"
+                        value={adjustDelta} onChange={e => setAdjustDelta(e.target.value)}
+                        placeholder="e.g. -10.00" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="adjust-reason">Reason (10–500 characters)</Label>
+                      <textarea id="adjust-reason"
+                        className="w-full rounded-md border bg-background p-2 text-sm"
+                        rows={3} maxLength={500} value={adjustReason}
+                        onChange={e => setAdjustReason(e.target.value)}
+                        placeholder="Explain why this correction is needed" />
+                    </div>
+                    <Button disabled={adjustSaving || !adjustDelta.trim() || adjustReason.trim().length < 10}
+                      onClick={handleAdjustment}>
+                      {adjustSaving ? "Saving..." : "Save adjustment"}
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+            <div className="space-y-2">
+              <p className="text-sm font-semibold">Adjustment history</p>
+              {adjustmentHistory === undefined ? (
+                <p className="text-xs text-muted-foreground">Loading history...</p>
+              ) : adjustmentHistory.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No adjustments recorded.</p>
+              ) : adjustmentHistory.map(entry => (
+                <div key={entry._id} className="rounded-md border p-2 text-xs space-y-1">
+                  <p className="font-semibold capitalize">
+                    {entry.component}: {entry.deltaGhs > 0 ? "+" : ""}GHS {fmt(entry.deltaGhs)}
+                  </p>
+                  <p>{entry.reason}</p>
+                  <p className="text-muted-foreground">{fmtDate(entry.createdAt)}</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Payment history */}
       {payments && payments.length > 0 && (

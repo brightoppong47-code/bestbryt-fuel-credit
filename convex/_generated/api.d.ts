@@ -26,6 +26,7 @@ import type * as messaging from "../messaging.js";
 import type * as messaging_internal from "../messaging_internal.js";
 import type * as penalties from "../penalties.js";
 import type * as reports from "../reports.js";
+import type * as transactionAdjustments from "../transactionAdjustments.js";
 import type * as transactions from "../transactions.js";
 import type * as users from "../users.js";
 
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   messaging_internal: typeof messaging_internal;
   penalties: typeof penalties;
   reports: typeof reports;
+  transactionAdjustments: typeof transactionAdjustments;
   transactions: typeof transactions;
   users: typeof users;
 }>;

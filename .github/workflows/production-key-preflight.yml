@@ -1,0 +1,26 @@
+name: Verify BESTBRYT production Convex key (no deployment)
+on:
+  push:
+    branches: [release/admin-adjustments-main-compatible-2026-11]
+    paths: [".github/workflows/production-key-preflight.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-key:
+    if: github.ref == 'refs/heads/release/admin-adjustments-main-compatible-2026-11'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify production key is present and targets the expected deployment
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        shell: bash
+        run: |
+          if [ -z "$CONVEX_DEPLOY_KEY" ]; then
+            echo "::error::CONVEX_DEPLOY_KEY is not configured"
+            exit 1
+          fi
+          case "$CONVEX_DEPLOY_KEY" in
+            prod:blissful-hawk-149\|*) echo "Production deployment key target verified" ;;
+            *) echo "::error::Deployment key does not target prod:blissful-hawk-149"; exit 1 ;;
+          esac
