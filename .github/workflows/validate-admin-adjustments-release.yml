@@ -1,0 +1,30 @@
+name: Validate BESTBRYT admin adjustments release
+on:
+  push:
+    branches:
+      - release/admin-adjustments-integration-2026-11
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - name: Build integrated website without deploying
+        env:
+          VITE_BASE_PATH: /bestbryt-fuel-credit-test/
+          VITE_CONVEX_URL: https://acoustic-meerkat-220.convex.cloud
+          VITE_HERCULES_OIDC_AUTHORITY: ${{ secrets.VITE_HERCULES_OIDC_AUTHORITY }}
+          VITE_HERCULES_OIDC_CLIENT_ID: ${{ secrets.VITE_HERCULES_OIDC_CLIENT_ID }}
+          VITE_HERCULES_WEBSITE_ID: 01M0CT57Y07T916YEXC6GKE4QR
+        run: pnpm build
