@@ -21,7 +21,8 @@ async function setup() {
     return { driverId };
   });
   const customer = { fullName: "Test Customer", accountNumber: "A001" };
-  const args = { driverId: ids.driverId, kind: "balance" as const, expectedBody: buildMessageDraft(customer, "balance", "", 100)!, expectedPhone: "0241234567", requestId: "mock-request-000000001" };
+  const balance = await t.withIdentity({ tokenIdentifier: "owner" }).query(api.transactions.getDriverBalance, { driverId: ids.driverId });
+  const args = { driverId: ids.driverId, kind: "balance" as const, expectedBody: buildMessageDraft(customer, "balance", "", balance.totalOwed)!, expectedPhone: "0241234567", requestId: "mock-request-000000001" };
   return { t, fetcher, args, customer };
 }
 it("submits once per request and audits provider ID without confirming delivery", async () => {
