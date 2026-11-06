@@ -35,9 +35,17 @@ export function adjustedBalance(tx: AdjustableCredit, now: Date, penaltyRate = 0
   const pauseEnd = tx.penaltyPausedUntil ? new Date(tx.penaltyPausedUntil) : undefined;
   const pauseValid = pauseStart && pauseEnd && Number.isFinite(pauseStart.getTime()) && Number.isFinite(pauseEnd.getTime()) && pauseEnd > pauseStart;
   const pausedThrough = pauseValid ? new Date(Math.min(now.getTime(), pauseEnd!.getTime())) : undefined;
-  const pausedDays = pausedThrough && pausedThrough > pauseStart!
-    ? Math.max(0, penaltyDays(tx.dueAt, pausedThrough) - penaltyDays(tx.dueAt, pauseStart!)) : 0;
-  const automaticPenalty = tx.status === "paid"
+  // Waivers cover the earliest chargeable days. Exclude only paused days
+  // beyond that boundary so overlapping waivers are not deducted twice.
+  const pauseStartDay = pauseStart ? penaltyDays(tx.dueAt, pauseStart) : 0;
+  const pauseEndDay = pausedThrough ? penaltyDays(tx.dueAt, pausedThrough) : 0;
+  const pausedDays = pauseValid
+    ? Math.max(0, pauseEndDay - Math.max(pauseStartDay, waivedDays))
+    : 0;
+  // Old records have an end date but no start date. We cannot reconstruct
+  // their paused days reliably. Freeze the recorded penalty until reviewed.
+  const legacyPause = !!tx.penaltyPausedUntil && !tx.penaltyPausedAt;
+  const automaticPenalty = tx.status === "paid" || legacyPause
     ? tx.penaltyGhs
     : money(base * penaltyRate * Math.max(0, chargeableDays - waivedDays - pausedDays));
   // A paid transaction stores the final settled penalty, including adjustments.
