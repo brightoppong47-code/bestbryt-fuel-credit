@@ -634,6 +634,9 @@ export const setPenaltyPause = mutation({
     if (tx.status === "paid") {
       throw new ConvexError({ message: "Cannot pause penalty on a paid transaction", code: "BAD_REQUEST" });
     }
+    if (tx.penaltyPausedUntil && !tx.penaltyPausedAt) {
+      throw new ConvexError({ message: "Legacy penalty pause requires owner review before changing its dates or recorded penalty", code: "CONFLICT" });
+    }
     const pauseDate = new Date(args.pauseUntil);
     if (isNaN(pauseDate.getTime()) || pauseDate <= new Date()) {
       throw new ConvexError({ message: "Pause-until date must be in the future", code: "BAD_REQUEST" });
@@ -658,6 +661,9 @@ export const clearPenaltyPause = mutation({
     await assertTransactionAccess(ctx, user, args.transactionId);
     const tx = await ctx.db.get(args.transactionId);
     if (!tx) throw new ConvexError({ message: "Transaction not found", code: "NOT_FOUND" });
+    if (tx.penaltyPausedUntil && !tx.penaltyPausedAt) {
+      throw new ConvexError({ message: "Legacy penalty pause requires owner review before resuming penalties", code: "CONFLICT" });
+    }
     await ctx.db.patch(args.transactionId, {
       penaltyPausedUntil: undefined,
       penaltyPausedAt: undefined,
