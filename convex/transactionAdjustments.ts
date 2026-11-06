@@ -56,3 +56,26 @@ export const history = query({
       .order("desc").collect();
   },
 });
+
+/** Owner-only review queue for older penalty pauses lacking a start timestamp.
+ * Read-only: does not resume penalties or change any financial record.
+ */
+export const legacyPauseReview = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireOwner(ctx);
+    const now = new Date();
+    const transactions = await ctx.db.query("transactions").collect();
+    return transactions
+      .filter(tx => tx.status !== "paid" && !!tx.penaltyPausedUntil && !tx.penaltyPausedAt)
+      .map(tx => ({
+        transactionId: tx._id,
+        driverId: tx.driverId,
+        recordedPenaltyGhs: tx.penaltyGhs,
+        amountPaidGhs: tx.amountPaidGhs ?? 0,
+        pauseUntil: tx.penaltyPausedUntil!,
+        expired: new Date(tx.penaltyPausedUntil!).getTime() <= now.getTime(),
+        reviewRequired: true,
+      }));
+  },
+});
