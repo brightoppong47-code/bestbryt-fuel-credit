@@ -3,6 +3,8 @@ on:
   push:
     branches:
       - feature/customer-statement-pdf-2026-11
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
