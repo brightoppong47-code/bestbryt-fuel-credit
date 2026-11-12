@@ -22,8 +22,7 @@ export const statement = query({
     ]);
     const rows: Array<{ date: string; type: string; reference: string; description: string; debitGhs: number; creditGhs: number }> = [];
     const allRows: typeof rows = [];
-    const txIds = new Set(transactions.map(t => t._id));
-    const adjustments = (await ctx.db.query("transaction_adjustments").collect()).filter(a => a.driverId === args.driverId && txIds.has(a.transactionId));
+    const adjustments = (await Promise.all(transactions.map(t => ctx.db.query("transaction_adjustments").withIndex("by_transaction", q => q.eq("transactionId", t._id)).collect()))).flat();
     for (const tx of transactions) {
       allRows.push({ date: tx.issuedAt, type: "Fuel credit", reference: tx._id, description: "Fuel principal", debitGhs: tx.fuelAmountGhs, creditGhs: 0 });
       if (tx.interestGhs) {
