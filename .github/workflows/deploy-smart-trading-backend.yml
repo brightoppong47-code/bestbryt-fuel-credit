@@ -1,0 +1,29 @@
+name: Deploy Smart Trading bridge backend first
+on:
+  push:
+    branches: [feature/smart-trading-registration]
+permissions:
+  contents: read
+concurrency:
+  group: convex-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - name: Deploy additive production backend before website
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: |
+          node -e 'if (!process.env.CONVEX_DEPLOY_KEY) throw new Error("Missing CONVEX_DEPLOY_KEY")'
+          pnpm exec convex deploy --typecheck enable
