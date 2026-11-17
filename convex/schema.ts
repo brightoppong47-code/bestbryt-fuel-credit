@@ -67,6 +67,7 @@ export default defineSchema({
   }).index("by_code", ["code"]),
 
   drivers: defineTable({
+    smartTradingCode: v.optional(v.string()),
     // Identity
     fullName: v.string(),
     phone: v.string(),
@@ -95,6 +96,26 @@ export default defineSchema({
     .index("by_name", ["fullName"])
     .index("by_account_number", ["accountNumber"])
     .index("by_branch", ["branchId"]),
+
+  smart_trading_counters: defineTable({ key: v.string(), nextSequence: v.number() })
+    .index("by_key", ["key"]),
+
+  // Registration requests are separate from issued fuel and customer balances.
+  smart_trading_requests: defineTable({
+    driverId: v.id("drivers"),
+    tradingCode: v.string(),
+    branchId: v.id("branches"),
+    vehicleType: v.string(),
+    requestedAmountGhs: v.number(),
+    createdBy: v.id("users"),
+    createdAt: v.string(),
+    deliveryStatus: v.union(v.literal("queued"), v.literal("delivered")),
+    nextAttemptAt: v.number(),
+    attempts: v.number(),
+    deliveredAt: v.optional(v.string()),
+    lastError: v.optional(v.string()),
+  }).index("by_driver", ["driverId"])
+    .index("by_delivery", ["deliveryStatus", "nextAttemptAt"]),
 
   // Each fuel credit issued to a driver
   transactions: defineTable({

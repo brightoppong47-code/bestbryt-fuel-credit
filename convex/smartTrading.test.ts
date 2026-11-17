@@ -1,0 +1,86 @@
+import { afterEach, expect, it, vi } from "vitest";
+import { convexTest } from "convex-test";
+import schema from "./schema";
+import { modules } from "./test.setup";
+import { api, internal } from "./_generated/api";
+
+afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+async function fixture() {
+  const t = convexTest(schema, modules);
+  const ids = await t.run(async ctx => {
+    const owner = await ctx.db.insert("users", { role: "owner", tokenIdentifier: "test|owner" });
+    const branchId = await ctx.db.insert("branches", { name: "Central", code: "CTR", isActive: true, nextSequence: 1, createdBy: owner });
+    const other = await ctx.db.insert("branches", { name: "Other", code: "OTH", isActive: true, nextSequence: 1, createdBy: owner });
+    await ctx.db.insert("users", { role: "staff", tokenIdentifier: "test|staff", branchId });
+    return { branchId, other };
+  });
+  const args = { ...ids, fullName: "Private Name", phone: "0244000000", address: "Private address", vehiclePlate: "REAL-123", vehicleType: "Taxi", gpsLatitude: 5, gpsLongitude: -1 };
+  const { other, ...registration } = args;
+  return { t, ids, registration, owner: t.withIdentity({ tokenIdentifier: "test|owner" }), staff: t.withIdentity({ tokenIdentifier: "test|staff" }) };
+}
+it("atomically saves a request and unique alias without issuing fuel or changing balances", async () => {
+  const { t, owner, registration, ids } = await fixture();
+  const id = await owner.mutation(api.drivers.registerDriver, { ...registration, requestedFuelAmountGhs: 1000.25 });
+  const id2 = await owner.mutation(api.drivers.registerDriver, { ...registration, branchId: ids.other, requestedFuelAmountGhs: 200 });
+  const records = await t.run(async ctx => ({ driver: await ctx.db.get(id), driver2: await ctx.db.get(id2), requests: await ctx.db.query("smart_trading_requests").collect(), credits: await ctx.db.query("transactions").collect(), payments: await ctx.db.query("payments").collect() }));
+  expect(records.driver?.smartTradingCode).toBe("SMART-000001");
+  expect(records.driver2?.smartTradingCode).toBe("SMART-000002");
+  expect(records.requests).toHaveLength(2);
+  expect(records.requests[0].requestedAmountGhs).toBe(1000.25);
+  expect(records.credits).toEqual([]); expect(records.payments).toEqual([]);
+  expect((await owner.query(api.drivers.getDriver, { driverId: id }))?.tradingRequest?.deliveryStatus).toBe("queued");
+});
+it("rejects invalid amounts before saving and preserves old registration clients", async () => {
+  const { t, owner, registration } = await fixture();
+  for (const requestedFuelAmountGhs of [0, -1, 1.001, Infinity, NaN, 1e20]) {
+    await expect(owner.mutation(api.drivers.registerDriver, { ...registration, requestedFuelAmountGhs })).rejects.toThrow();
+  }
+  expect(await t.run(ctx => ctx.db.query("drivers").collect())).toHaveLength(0);
+  expect(await t.run(ctx => ctx.db.query("smart_trading_requests").collect())).toHaveLength(0);
+  await owner.mutation(api.drivers.registerDriver, registration);
+  expect(await t.run(ctx => ctx.db.query("smart_trading_requests").collect())).toHaveLength(0);
+});
+it("keeps registration and request visibility branch restricted", async () => {
+  const { owner, staff, ids, registration } = await fixture();
+  await expect(staff.mutation(api.drivers.registerDriver, { ...registration, branchId: ids.other, requestedFuelAmountGhs: 100 })).rejects.toThrow("assigned branch");
+  const id = await owner.mutation(api.drivers.registerDriver, { ...registration, branchId: ids.other, requestedFuelAmountGhs: 100 });
+  expect(await staff.query(api.drivers.getDriver, { driverId: id })).toBeNull();
+});
+it("leaves unconfigured requests queued and sends only an authenticated privacy limited event", async () => {
+  const { t, owner, registration } = await fixture();
+  await owner.mutation(api.drivers.registerDriver, { ...registration, requestedFuelAmountGhs: 500 });
+  const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);
+  vi.stubEnv("SMART_TRADING_REQUEST_URL", ""); vi.stubEnv("SMART_TRADING_BRIDGE_SECRET", "");
+  await t.action(internal.smartTrading.deliverRequests, {});
+  expect(fetchMock).not.toHaveBeenCalled();
+  vi.stubEnv("SMART_TRADING_REQUEST_URL", "https://smart.example/requests");
+  vi.stubEnv("SMART_TRADING_BRIDGE_SECRET", "test-shared-secret");
+  fetchMock.mockImplementation(async (_url, init) => {
+    const body = JSON.parse(init.body);
+    expect(Object.keys(body).sort()).toEqual(["createdAt", "currency", "requestId", "requestedAmountGhs", "schemaVersion", "status", "tradingCode", "vehicleType"].sort());
+    expect(init.headers.Authorization).toBe("Bearer test-shared-secret");
+    expect(init.headers["Idempotency-Key"]).toBe(body.requestId);
+    return new Response(JSON.stringify({ accepted: true, requestId: body.requestId }), { status: 200 });
+  });
+  await t.action(internal.smartTrading.deliverRequests, {});
+  await t.action(internal.smartTrading.deliverRequests, {});
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect((await t.run(ctx => ctx.db.query("smart_trading_requests").first()))?.deliveryStatus).toBe("delivered");
+});
+it("retries failed acknowledgements and ignores stale worker completions", async () => {
+  const { t, owner, registration } = await fixture();
+  await owner.mutation(api.drivers.registerDriver, { ...registration, requestedFuelAmountGhs: 100 });
+  vi.stubEnv("SMART_TRADING_REQUEST_URL", "https://smart.example/requests");
+  vi.stubEnv("SMART_TRADING_BRIDGE_SECRET", "test-secret");
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ accepted: true, requestId: "wrong" }))));
+  await t.action(internal.smartTrading.deliverRequests, {});
+  const request = (await t.run(ctx => ctx.db.query("smart_trading_requests").first()))!;
+  expect(request.deliveryStatus).toBe("queued"); expect(request.lastError).toContain("acknowledge");
+  expect(await t.mutation(internal.smartTrading.claimRequest, {})).toBeNull();
+  await t.run(ctx => ctx.db.patch(request._id, { nextAttemptAt: Date.now() - 1 }));
+  const claimed = (await t.mutation(internal.smartTrading.claimRequest, {}))!;
+  await t.mutation(internal.smartTrading.finishDelivery, { requestId: request._id, attempt: 1 });
+  expect((await t.run(ctx => ctx.db.get(request._id)))?.deliveryStatus).toBe("queued");
+  await t.mutation(internal.smartTrading.finishDelivery, { requestId: request._id, attempt: claimed.attempts });
+  expect((await t.run(ctx => ctx.db.get(request._id)))?.deliveryStatus).toBe("delivered");
+});

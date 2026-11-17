@@ -35,6 +35,11 @@ import { cn } from "@/lib/utils.ts";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
 
 const schema = z.object({
+  requestedFuelAmountGhs: z.number({ error: "Enter the requested fuel amount" })
+    .finite().positive("Enter an amount greater than zero")
+    .refine(value => Number.isSafeInteger(Math.round(value * 100)) &&
+      Math.abs(value * 100 - Math.round(value * 100)) < 0.000001,
+      "Use at most two decimal places"),
   fullName: z.string().min(2, "Name is required"),
   phone: z.string().min(9, "Valid phone number required"),
   address: z.string().min(3, "Address is required"),
@@ -256,7 +261,7 @@ export default function DriverRegistrationForm() {
         witnessName: values.witnessName || undefined,
         witnessPhone: values.witnessPhone || undefined,
       });
-      toast.success("Driver registered successfully!");
+      toast.success("Driver registered. Fuel request saved for Smart Trading.");
       navigate("/drivers");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
@@ -380,6 +385,22 @@ export default function DriverRegistrationForm() {
               <Input id="vehiclePlate" placeholder="GR 1234-20" {...register("vehiclePlate")} />
               {errors.vehiclePlate && <p className="text-destructive text-xs">{errors.vehiclePlate.message}</p>}
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="text-base">Fuel Request for Smart Trading</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <Label htmlFor="requestedFuelAmountGhs">Requested Fuel Amount (GH₵) *</Label>
+            <Input id="requestedFuelAmountGhs" type="number" inputMode="decimal"
+              min="0.01" step="0.01" placeholder="e.g. 500.00"
+              aria-invalid={!!errors.requestedFuelAmountGhs}
+              aria-describedby="fuel-request-help"
+              {...register("requestedFuelAmountGhs", { valueAsNumber: true })} />
+            {errors.requestedFuelAmountGhs && <p role="alert" className="text-destructive text-xs">{errors.requestedFuelAmountGhs.message}</p>}
+            <p id="fuel-request-help" className="text-sm text-muted-foreground">
+              This request is saved for Smart Trading admin selection. It does not issue fuel or add a debt.
+            </p>
           </CardContent>
         </Card>
 

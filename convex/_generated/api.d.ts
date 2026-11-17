@@ -29,6 +29,7 @@ import type * as penalties from "../penalties.js";
 import type * as reports from "../reports.js";
 import type * as transactionAdjustments from "../transactionAdjustments.js";
 import type * as transactions from "../transactions.js";
+import type * as smartTrading from "../smartTrading.js";
 import type * as users from "../users.js";
 
 import type {
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   reports: typeof reports;
   transactionAdjustments: typeof transactionAdjustments;
   transactions: typeof transactions;
+  smartTrading: typeof smartTrading;
   users: typeof users;
 }>;
 

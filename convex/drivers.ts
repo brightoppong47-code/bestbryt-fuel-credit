@@ -20,6 +20,7 @@ function padSequence(n: number): string {
 
 export const registerDriver = mutation({
   args: {
+    requestedFuelAmountGhs: v.optional(v.number()),
     fullName: v.string(),
     phone: v.string(),
     address: v.string(),
@@ -45,6 +46,14 @@ export const registerDriver = mutation({
       throw new ConvexError({ message: "You can only register drivers in your assigned branch", code: "FORBIDDEN" });
     }
 
+    // Optional only for compatibility with older app versions. The new form requires it.
+    const requestedAmount = args.requestedFuelAmountGhs;
+    if (requestedAmount !== undefined && (!Number.isFinite(requestedAmount) ||
+        requestedAmount <= 0 || !Number.isSafeInteger(Math.round(requestedAmount * 100)) ||
+        Math.abs(requestedAmount * 100 - Math.round(requestedAmount * 100)) > 0.000001)) {
+      throw new ConvexError({ message: "Enter a positive fuel request amount with at most two decimal places", code: "BAD_REQUEST" });
+    }
+
     // Claim the next sequence number atomically
     const seq = branch.nextSequence;
     await ctx.db.patch(args.branchId, { nextSequence: seq + 1 });
@@ -52,7 +61,14 @@ export const registerDriver = mutation({
     // Format: BBV-{BRANCHCODE}-{000001}
     const accountNumber = `BBV-${branch.code}-${padSequence(seq)}`;
 
-    return await ctx.db.insert("drivers", {
+    const counter = await ctx.db.query("smart_trading_counters")
+      .withIndex("by_key", q => q.eq("key", "driver")).unique();
+    const tradingSequence = counter?.nextSequence ?? 1;
+    if (counter) await ctx.db.patch(counter._id, { nextSequence: tradingSequence + 1 });
+    else await ctx.db.insert("smart_trading_counters", { key: "driver", nextSequence: tradingSequence + 1 });
+    const tradingCode = `SMART-${padSequence(tradingSequence)}`;
+    const driverId = await ctx.db.insert("drivers", {
+      smartTradingCode: tradingCode,
       fullName: args.fullName,
       phone: args.phone,
       address: args.address,
@@ -71,6 +87,15 @@ export const registerDriver = mutation({
       isActive: true,
       registeredBy: user._id,
     });
+    if (requestedAmount !== undefined) {
+      await ctx.db.insert("smart_trading_requests", {
+        driverId, tradingCode, branchId: args.branchId, vehicleType: args.vehicleType,
+        requestedAmountGhs: Math.round(requestedAmount * 100) / 100,
+        createdBy: user._id, createdAt: new Date().toISOString(),
+        deliveryStatus: "queued", nextAttemptAt: Date.now(), attempts: 0,
+      });
+    }
+    return driverId;
   },
 });
 
@@ -157,6 +182,8 @@ export const getDriver = query({
       ? await ctx.storage.getUrl(driver.photoStorageId)
       : null;
     const branch = await ctx.db.get(driver.branchId);
-    return { ...driver, photoUrl, branch };
+    const tradingRequest = await ctx.db.query("smart_trading_requests")
+      .withIndex("by_driver", q => q.eq("driverId", driver._id)).first();
+    return { ...driver, photoUrl, branch, tradingRequest };
   },
 });

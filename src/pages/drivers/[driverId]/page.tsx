@@ -124,6 +124,20 @@ export default function DriverProfilePage() {
         </div>
       </div>
 
+      {driver.tradingRequest && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Smart Trading Fuel Request</CardTitle></CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <p className="font-semibold">GH₵ {fmt(driver.tradingRequest.requestedAmountGhs)}</p>
+            <p className="font-mono break-all">{driver.smartTradingCode}</p>
+            <p>{driver.tradingRequest.deliveryStatus === "delivered"
+              ? "Received by Smart Trading — awaiting admin selection"
+              : "Saved — awaiting delivery to Smart Trading"}</p>
+            <p className="text-muted-foreground">A request does not issue fuel or change the customer's balance.</p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Balance summary */}
       {balance && (
         <div className="grid grid-cols-3 gap-3">

@@ -12,4 +12,6 @@ crons.hourly(
   internal.penalties.updatePenaltiesAndStatuses,
 );
 
+crons.interval("deliver Smart Trading registration requests", { minutes: 5 }, internal.smartTrading.deliverRequests);
+
 export default crons;
