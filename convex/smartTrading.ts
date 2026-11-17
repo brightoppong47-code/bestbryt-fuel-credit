@@ -160,3 +160,27 @@ export const deliverActivities = internalAction({
     }
   },
 });
+
+// Read-only snapshot for practice accounts. Source receipt notes and customer identity stay in the fuel app.
+export const demoHistory = internalQuery({
+  args:{account:v.optional(v.string()),driver:v.optional(v.id("drivers"))},
+  handler:async (ctx,args)=>{
+    const account=args.account;
+    const driver=args.driver?await ctx.db.get(args.driver):account?await ctx.db.query("drivers").withIndex("by_account_number",q=>q.eq("accountNumber",account)).unique():null;
+    if(!driver)return null;
+    const credits=await ctx.db.query("transactions").withIndex("by_driver",q=>q.eq("driverId",driver._id)).collect();
+    const payments=await ctx.db.query("payments").withIndex("by_driver",q=>q.eq("driverId",driver._id)).collect();
+    return {driver:driver._id,asOf:Date.now(),credits:credits.map(tx=>{
+      const receipts=payments.filter(p=>p.transactionId===tx._id);
+      const verified=receipts.filter(p=>p.reconciliationStatus==="verified");
+      const principal=Math.round(verified.reduce((s,p)=>s+(p.principalGhs??0),0)*100);
+      const interest=Math.round(verified.reduce((s,p)=>s+(p.interestGhs??0),tx.interestCollectedUpfront?tx.interestGhs:0)*100);
+      const booked=Math.round(receipts.reduce((s,p)=>s+p.amountGhs,0)*100);
+      const review=!!(tx.principalAdjustmentGhs||tx.interestAdjustmentGhs||tx.penaltyAdjustmentGhs)
+        ||receipts.some(p=>p.reconciliationStatus!=="verified"||p.principalGhs===undefined||p.interestGhs===undefined||p.penaltyGhs===undefined)
+        || Math.round((tx.amountPaidGhs??0)*100)!==booked;
+      return {id:tx._id,issued:tx.issuedAt,due:tx.dueAt,status:tx.status,amount:Math.round(tx.fuelAmountGhs*100),principal,interestPaid:tx.interestGhs>0&&interest>=Math.round(tx.interestGhs*100),review,
+        receipts:receipts.map(p=>({date:p.recordedAt,status:p.reconciliationStatus??"unverified",principal:p.principalGhs===undefined?null:Math.round(p.principalGhs*100),penalty:p.penaltyGhs===undefined?null:Math.round(p.penaltyGhs*100)}))};
+    })};
+  },
+});
