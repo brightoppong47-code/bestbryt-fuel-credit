@@ -131,7 +131,7 @@ export default function DriverProfilePage() {
             <p className="font-semibold">GH₵ {fmt(driver.tradingRequest.requestedAmountGhs)}</p>
             <p className="font-mono break-all">{driver.smartTradingCode}</p>
             <p>{driver.tradingRequest.deliveryStatus === "delivered"
-              ? "Received by Smart Trading — awaiting admin selection"
+              ? "Received by Smart Trading"
               : "Saved — awaiting delivery to Smart Trading"}</p>
             <p className="text-muted-foreground">A request does not issue fuel or change the customer's balance.</p>
           </CardContent>

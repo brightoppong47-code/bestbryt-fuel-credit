@@ -97,6 +97,11 @@ export default defineSchema({
     .index("by_account_number", ["accountNumber"])
     .index("by_branch", ["branchId"]),
 
+  smart_trading_connection: defineTable({
+    key: v.string(), requestUrl: v.string(), bridgeSecret: v.string(), sitesToken: v.string(),
+    updatedBy: v.id("users"), updatedAt: v.string(),
+  }).index("by_key", ["key"]),
+
   smart_trading_counters: defineTable({ key: v.string(), nextSequence: v.number() })
     .index("by_key", ["key"]),
 
@@ -109,13 +114,18 @@ export default defineSchema({
     requestedAmountGhs: v.number(),
     createdBy: v.id("users"),
     createdAt: v.string(),
+    transactionId: v.optional(v.id("transactions")),
+    nextActivityAt: v.optional(v.number()),
+    lastActivityHash: v.optional(v.string()),
+    activityError: v.optional(v.string()),
     deliveryStatus: v.union(v.literal("queued"), v.literal("delivered")),
     nextAttemptAt: v.number(),
     attempts: v.number(),
     deliveredAt: v.optional(v.string()),
     lastError: v.optional(v.string()),
   }).index("by_driver", ["driverId"])
-    .index("by_delivery", ["deliveryStatus", "nextAttemptAt"]),
+    .index("by_delivery", ["deliveryStatus", "nextAttemptAt"])
+    .index("by_activity", ["nextActivityAt"]),
 
   // Each fuel credit issued to a driver
   transactions: defineTable({

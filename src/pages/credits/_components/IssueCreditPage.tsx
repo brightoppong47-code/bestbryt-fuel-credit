@@ -42,6 +42,7 @@ export default function IssueCreditPage() {
 
   const [driverSearch, setDriverSearch] = useState("");
   const [selectedDriverId, setSelectedDriverId] = useState<string>(preselectedDriverId ?? "");
+  const [linkTradingRequest, setLinkTradingRequest] = useState(false);
   const [interestCollected, setInterestCollected] = useState(false);
   // Inline blocking message when arrears rule blocks the credit
   const [arrearsBlock, setArrearsBlock] = useState<string | null>(null);
@@ -77,6 +78,7 @@ export default function IssueCreditPage() {
   // Clear the arrears block whenever driver changes
   const handleDriverChange = (id: string) => {
     setSelectedDriverId(id);
+    setLinkTradingRequest(false);
     setArrearsBlock(null);
     setInterestCollected(false);
   };
@@ -93,6 +95,7 @@ export default function IssueCreditPage() {
     setArrearsBlock(null);
     try {
       const txId = await issueCredit({
+        smartTradingRequestId: linkTradingRequest ? selectedDriver?.tradingRequest?._id : undefined,
         driverId: selectedDriverId as Id<"drivers">,
         fuelAmountGhs: parseFloat(values.fuelAmountGhs),
         interestCollectedUpfront: interestCollected,
@@ -129,6 +132,14 @@ export default function IssueCreditPage() {
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+        {selectedDriver?.tradingRequest && !selectedDriver.tradingRequest.transactionId && (
+          <Card><CardContent className="pt-5 space-y-2">
+            <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={linkTradingRequest} onChange={e=>setLinkTradingRequest(e.target.checked)} />
+              Link this fuel issue to Smart Trading request: GHS {fmt(selectedDriver.tradingRequest.requestedAmountGhs)} ({selectedDriver.smartTradingCode})
+            </label>
+            <p className="text-xs text-muted-foreground">Only select this for the exact request funded through Smart Trading. Fuel issuance follows your normal process.</p>
+          </CardContent></Card>
+        )}
         {/* Driver selection */}
         <Card>
           <CardHeader>

@@ -25,6 +25,7 @@ function overdueDays(dueAt: string, now: Date): number {
 
 export const issueCredit = mutation({
   args: {
+    smartTradingRequestId: v.optional(v.id("smart_trading_requests")),
     driverId: v.id("drivers"),
     fuelAmountGhs: v.number(),
     interestCollectedUpfront: v.optional(v.boolean()),
@@ -85,6 +86,10 @@ export const issueCredit = mutation({
 
     const interestRatePercent = await readInterestRatePercent(ctx);
     if ((args.expectedInterestRatePercent ?? 5) !== interestRatePercent) throw new ConvexError({message:"The interest percentage changed. Refresh the credit form and confirm the new interest amount before issuing.",code:"RATE_CHANGED"});
+    if (args.smartTradingRequestId) {
+      const request = await ctx.db.get(args.smartTradingRequestId);
+      if (!request || request.driverId !== args.driverId || request.transactionId || Math.round(request.requestedAmountGhs * 100) !== Math.round(args.fuelAmountGhs * 100) || interestRatePercent !== 10) throw new ConvexError({ message: "Smart Trading request must belong to this driver, be unused, match the fuel amount and use 10% interest", code: "BAD_REQUEST" });
+    }
     const interestGhs = Math.round(args.fuelAmountGhs * interestRatePercent) / 100;
     if (!Number.isFinite(interestGhs)) throw new Error("Interest amount is too large");
     const issuedAt = new Date().toISOString();
@@ -95,7 +100,7 @@ export const issueCredit = mutation({
       ? args.fuelAmountGhs
       : Math.round((args.fuelAmountGhs + interestGhs) * 100) / 100;
 
-    return await ctx.db.insert("transactions", {
+    const transactionId = await ctx.db.insert("transactions", {
       driverId: args.driverId,
       fuelAmountGhs: args.fuelAmountGhs,
       interestGhs,
@@ -109,6 +114,8 @@ export const issueCredit = mutation({
       notes: args.notes,
       issuedBy: user._id,
     });
+    if (args.smartTradingRequestId) await ctx.db.patch(args.smartTradingRequestId, { transactionId, nextActivityAt: Date.now() });
+    return transactionId;
   },
 });
 

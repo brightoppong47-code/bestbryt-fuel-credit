@@ -36,6 +36,7 @@ import { format } from "date-fns";
 import { AppearanceSettings } from "./_components/AppearanceSettings.tsx";
 import { BackupRestore } from "./_components/BackupRestore.tsx";
 import { DangerZone } from "./_components/DangerZone.tsx";
+import { SmartTradingSettings } from "./_components/SmartTradingSettings.tsx";
 import { cn } from "@/lib/utils.ts";
 
 class CorrectionsBoundary extends Component<{children: ReactNode}, {error: Error | null}> {
@@ -374,10 +375,11 @@ function InterestRateSettings() {
 
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 
-type SettingsTab = "team" | "business" | "appearance" | "backup" | "danger" | "corrections";
+type SettingsTab = "trading" | "team" | "business" | "appearance" | "backup" | "danger" | "corrections";
 
 const TAB_CONFIG: { id: SettingsTab; label: string; icon: React.ComponentType<{ className?: string }>; ownerOnly?: boolean }[] = [
   { id: "team", label: "Team & Branches", icon: Users },
+  { id: "trading", label: "Smart Trading", icon: ShieldCheck, ownerOnly: true },
   { id: "business", label: "Business", icon: Building2, ownerOnly: true },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "backup", label: "Backup", icon: Database },
@@ -679,6 +681,7 @@ export default function SettingsPage() {
       {activeTab === "appearance" && <AppearanceSettings />}
 
       {/* ── Backup tab ──────────────────────────────────────────────────── */}
+      {activeTab === "trading" && currentUser?.role === "owner" && <SmartTradingSettings />}
       {activeTab === "backup" && <BackupRestore />}
 
       {/* ── Danger Zone tab (owner only) ─────────────────────────────────── */}

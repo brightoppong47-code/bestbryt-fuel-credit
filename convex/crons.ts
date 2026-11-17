@@ -14,4 +14,6 @@ crons.hourly(
 
 crons.interval("deliver Smart Trading registration requests", { minutes: 5 }, internal.smartTrading.deliverRequests);
 
+crons.interval("deliver Smart Trading repayment activity", { minutes: 5 }, internal.smartTrading.deliverActivities);
+
 export default crons;

@@ -32,7 +32,17 @@ Payload fields:
 
 No name, phone, original plate, home address, GPS, photo, witness details or internal notes are sent. An accepted event must be durably stored in the Smart Trading admin selection queue before responding with HTTP 2xx and JSON { "accepted": true, "requestId": "<the exact source request ID>" }. Any other response leaves the event queued.
 
-This change prepares registration delivery only. It does not implement the Smart Trading receiver, trader accounts, actual money movements, the repayment activity feed, credit-to-request matching, returns or reimbursements. Those must be implemented in the separate application. Do not enable real-money funding until the source credit matching and repayment integration are operational.
+The separate Smart Trading application hosts the receiver, trader accounts and wallet logic. Funding remains disabled there until the source connection is verified.
+
+## Admin setup and verified credit activity
+
+In Smart Trading, the admin copies connection settings from Trading rules. Paste them into fuel app Settings → Smart Trading. Only the fuel owner can save settings; status queries never return credentials. Server-only connection settings take precedence over environment variables. For a private Smart Trading Site, the sender also supplies OAI-Sites-Authorization with the dedicated service token. Never share this setup bundle with traders.
+
+When issuing the exact corresponding fuel credit, staff explicitly tick the Smart Trading link checkbox. The backend checks the driver, exact requested amount, unused request and 10% interest rate atomically before linking. Unlinked fuel credits follow their normal process.
+
+A second five-minute worker sends linked source activity with deterministic event IDs. It includes upfront interest confirmation and only verified payment component allocations. Missing legacy allocations, source adjustments or decreasing totals stop financial updates for owner review. It never derives principal paid by subtracting arbitrary penalties from a total. No names, original plates or precise locations are sent. Late principal recovery after reimbursement restores the Smart Trading reserve; penalties are retained by the company.
+
+Activity POST /api/bridge/activity uses the same authentication, with eventId, requestId, creditId, dueAt, sourceAt, principalPaidGhs, interestPaidGhs and penaltyPaidGhs. The receiver deduplicates eventId and acknowledges with accepted: true and the exact eventId. Transport timestamps may differ on retries without changing the logical event. Same-request events must be sent serially.
 
 ## Release order
 
