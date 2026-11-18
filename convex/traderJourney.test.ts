@@ -12,3 +12,12 @@ it("counts fully paid penalty days, skips Sunday and ignores late or unverified 
  expect(traderJourney(tx,[payment(17,75)],[]).paidDays).toHaveLength(3);
  expect(traderJourney(tx,[],[]).faulty).toBe(false);
 });
+
+it("uses the verification that completes the interest payment or the upfront fuel issue",()=>{
+ const credit={...tx,interestGhs:20,interestCollectedUpfront:false};
+ const first={...payment(14,0),interestGhs:8,reconciledAt:"2026-11-15T08:00:00Z"};
+ const second={...payment(14,0),interestGhs:12,reconciledAt:"2026-11-15T08:03:00Z"};
+ expect(traderJourney(credit,[first],[]).confirmedInterestAt).toBeNull();
+ expect(traderJourney(credit,[second,first],[]).confirmedInterestAt).toBe(second.reconciledAt);
+ expect(traderJourney({...credit,interestCollectedUpfront:true},[],[]).confirmedInterestAt).toBe(credit.issuedAt);
+});
