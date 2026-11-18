@@ -34,6 +34,9 @@ export default function DriverProfilePage() {
     driverId ? { driverId: driverId as Id<"drivers"> } : "skip",
     { initialNumItems: 20 }
   );
+  const requestAgain=useMutation(api.drivers.requestFuelAgain);
+  const [requestAmount,setRequestAmount]=useState("");
+  const [requestBusy,setRequestBusy]=useState(false);
   const updateDriver = useMutation(api.drivers.updateDriver);
   const currentUser = useConvexCurrentUser(convexApi.users.getCurrentUserData, {});
 
@@ -137,6 +140,17 @@ export default function DriverProfilePage() {
           </CardContent>
         </Card>
       )}
+
+      {driver.isActive&&(!driver.tradingRequest||driver.tradingRequest.transactionId)&&<Card>
+        <CardHeader><CardTitle>Request fuel again</CardTitle></CardHeader>
+        <CardContent><form className="flex flex-wrap items-end gap-3" onSubmit={async e=>{
+          e.preventDefault();setRequestBusy(true);
+          try{await requestAgain({driverId:driver._id,amount:Number(requestAmount)});setRequestAmount("");toast.success("Fuel request queued for Smart Trading.");}
+          catch(error){const detail=(error as {data?:{message?:string}}).data;toast.error(detail?.message??"Unable to submit the request. Please try again.");}
+          finally{setRequestBusy(false);}
+        }}><label>Fuel requested today (GH₵)<input className="block rounded border p-2" type="number" required min="0.01" max="10000000" step="0.01" value={requestAmount} onChange={e=>setRequestAmount(e.target.value)}/></label>
+        <Button type="submit" disabled={requestBusy}>Request fuel again</Button></form></CardContent>
+      </Card>}
 
       {/* Balance summary */}
       {balance && (

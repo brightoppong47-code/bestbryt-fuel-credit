@@ -1,6 +1,8 @@
 import { isBranchStaff, assignedBranchIds, canAccessBranch, assertBranchAccess, assertDriverAccess } from "./helpers";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { requireStaff } from "./helpers";
 import { paginationOptsValidator } from "convex/server";
@@ -18,6 +20,46 @@ export const generateUploadUrl = mutation({
 function padSequence(n: number): string {
   return String(n).padStart(6, "0");
 }
+
+async function nextTradingCode(ctx: MutationCtx) {
+    const counter = await ctx.db.query("smart_trading_counters")
+      .withIndex("by_key", q => q.eq("key", "driver")).unique();
+    const tradingSequence = counter?.nextSequence ?? 1;
+    if (counter) await ctx.db.patch(counter._id, { nextSequence: tradingSequence + 1 });
+    else await ctx.db.insert("smart_trading_counters", { key: "driver", nextSequence: tradingSequence + 1 });
+    return `SMART-${padSequence(tradingSequence)}`;
+}
+async function queueRequest(ctx: MutationCtx, driverId: Id<"drivers">, tradingCode: string, branchId: Id<"branches">,
+  vehicleType: string, requestedAmount: number, createdBy: Id<"users">) {
+      await ctx.db.insert("smart_trading_requests", {
+        driverId, tradingCode, branchId: branchId, vehicleType: vehicleType,
+        requestedAmountGhs: Math.round(requestedAmount * 100) / 100,
+        createdBy: createdBy, createdAt: new Date().toISOString(),
+        deliveryStatus: "queued", nextAttemptAt: Date.now(), attempts: 0,
+      });
+      const connection = await ctx.db.query("smart_trading_connection").withIndex("by_key", q => q.eq("key", "global")).unique();
+      if (connection || (process.env.SMART_TRADING_REQUEST_URL && process.env.SMART_TRADING_BRIDGE_SECRET)) await ctx.scheduler.runAfter(0, internal.smartTrading.deliverRequests, {});
+}
+
+export const requestFuelAgain = mutation({
+  args: {driverId:v.id("drivers"),amount:v.number()},
+  handler: async(ctx,{driverId,amount})=>{
+    const user=await requireStaff(ctx);
+    const driver=await assertDriverAccess(ctx,user,driverId);
+    if(!driver.isActive || !Number.isFinite(amount) || amount<=0 || amount>10000000 || Math.abs(amount*100-Math.round(amount*100))>0.000001)
+      throw new ConvexError({message:"Choose an active driver and enter a valid fuel amount.",code:"BAD_REQUEST"});
+    const latest=await ctx.db.query("smart_trading_requests").withIndex("by_driver",q=>q.eq("driverId",driverId)).order("desc").first();
+    if(latest&&!latest.transactionId)throw new ConvexError({message:"This driver already has an open fuel request.",code:"CONFLICT"});
+    if(latest?.transactionId){
+      const receipts=await ctx.db.query("payments").withIndex("by_transaction",q=>q.eq("transactionId",latest.transactionId!)).collect();
+      const principal=receipts.reduce((sum,p)=>sum+(p.reconciliationStatus==="verified"?Math.round((p.principalGhs??0)*100):0),0);
+      if(principal<Math.round(latest.requestedAmountGhs*100))throw new ConvexError({message:"Verify the previous principal repayment first.",code:"BAD_REQUEST"});
+    }
+    const code=driver.smartTradingCode??await nextTradingCode(ctx);
+    if(!driver.smartTradingCode)await ctx.db.patch(driverId,{smartTradingCode:code});
+    await queueRequest(ctx,driverId,code,driver.branchId,driver.vehicleType,amount,user._id);
+  }
+});
 
 export const registerDriver = mutation({
   args: {
@@ -62,12 +104,7 @@ export const registerDriver = mutation({
     // Format: BBV-{BRANCHCODE}-{000001}
     const accountNumber = `BBV-${branch.code}-${padSequence(seq)}`;
 
-    const counter = await ctx.db.query("smart_trading_counters")
-      .withIndex("by_key", q => q.eq("key", "driver")).unique();
-    const tradingSequence = counter?.nextSequence ?? 1;
-    if (counter) await ctx.db.patch(counter._id, { nextSequence: tradingSequence + 1 });
-    else await ctx.db.insert("smart_trading_counters", { key: "driver", nextSequence: tradingSequence + 1 });
-    const tradingCode = `SMART-${padSequence(tradingSequence)}`;
+    const tradingCode = await nextTradingCode(ctx);
     const driverId = await ctx.db.insert("drivers", {
       smartTradingCode: tradingCode,
       fullName: args.fullName,
@@ -89,14 +126,7 @@ export const registerDriver = mutation({
       registeredBy: user._id,
     });
     if (requestedAmount !== undefined) {
-      await ctx.db.insert("smart_trading_requests", {
-        driverId, tradingCode, branchId: args.branchId, vehicleType: args.vehicleType,
-        requestedAmountGhs: Math.round(requestedAmount * 100) / 100,
-        createdBy: user._id, createdAt: new Date().toISOString(),
-        deliveryStatus: "queued", nextAttemptAt: Date.now(), attempts: 0,
-      });
-      const connection = await ctx.db.query("smart_trading_connection").withIndex("by_key", q => q.eq("key", "global")).unique();
-      if (connection || (process.env.SMART_TRADING_REQUEST_URL && process.env.SMART_TRADING_BRIDGE_SECRET)) await ctx.scheduler.runAfter(0, internal.smartTrading.deliverRequests, {});
+      await queueRequest(ctx,driverId,tradingCode,args.branchId,args.vehicleType,requestedAmount,user._id);
     }
     return driverId;
   },
@@ -186,7 +216,7 @@ export const getDriver = query({
       : null;
     const branch = await ctx.db.get(driver.branchId);
     const tradingRequest = await ctx.db.query("smart_trading_requests")
-      .withIndex("by_driver", q => q.eq("driverId", driver._id)).first();
+      .withIndex("by_driver", q => q.eq("driverId", driver._id)).order("desc").first();
     return { ...driver, photoUrl, branch, tradingRequest };
   },
 });

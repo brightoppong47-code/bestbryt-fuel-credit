@@ -115,3 +115,21 @@ it("links only the exact request to a 10% fuel issue and exports verified compon
     expect(Object.keys(event.payload).sort()).toEqual(["journey","requestId", "creditId", "principalPaidGhs", "interestPaidGhs", "penaltyPaidGhs", "dueAt"].sort());
   }
 });
+
+it("reopens a settled driver under the same code only after a fresh request",async()=>{
+  const {t,owner,registration}=await fixture();
+  await t.run(ctx=>ctx.db.insert("app_settings",{key:"global",interestRatePercent:10}));
+  const driverId=await owner.mutation(api.drivers.registerDriver,{...registration,requestedFuelAmountGhs:200});
+  const first=(await owner.query(api.drivers.getDriver,{driverId}))!.tradingRequest!;
+  const again=()=>owner.mutation(api.drivers.requestFuelAgain,{driverId,amount:300});
+  await expect(again()).rejects.toThrow("open fuel request");
+  const transactionId=await owner.mutation(api.transactions.issueCredit,{driverId,fuelAmountGhs:200,expectedInterestRatePercent:10,smartTradingRequestId:first._id});
+  await expect(again()).rejects.toThrow("principal repayment");
+  await t.run(ctx=>ctx.db.insert("payments",{driverId,transactionId,recordedBy:first.createdBy,recordedAt:new Date().toISOString(),amountGhs:200,principalGhs:200,reconciliationStatus:"verified"}));
+  await again();
+  const next=(await owner.query(api.drivers.getDriver,{driverId}))!.tradingRequest!;
+  expect(next.tradingCode).toBe(first.tradingCode);
+  expect(next.requestedAmountGhs).toBe(300);
+  expect(next._id).not.toBe(first._id);
+  await expect(again()).rejects.toThrow("open fuel request");
+});
