@@ -1,3 +1,4 @@
+import { traderJourney } from "./lib/traderJourney";
 import { ConvexError, v } from "convex/values";
 import { requireOwner } from "./helpers";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
@@ -115,20 +116,22 @@ export const claimActivity = internalMutation({
     const tx = await ctx.db.get(request.transactionId);
     if (!tx) return { skip: true as const };
     const payments = await ctx.db.query("payments").withIndex("by_transaction", q => q.eq("transactionId", tx._id)).collect();
+    const faults=await ctx.db.query("complaints").withIndex("by_driver",q=>q.eq("driverId",tx.driverId)).collect();
+    const journey=traderJourney(tx,payments,faults);
     // Only reconciled receipts move trader money. Unknown legacy allocations need owner review.
     const verified = payments.filter(p => p.reconciliationStatus === "verified");
     if (verified.some(p => p.principalGhs === undefined || p.interestGhs === undefined || p.penaltyGhs === undefined)) {
       await ctx.db.patch(request._id, { activityError: "Verified receipt has no component allocation; owner review required" });
-      return { skip: true as const };
+      return { skip: true as const, journey, requestId:request._id };
     }
     const principalPaidGhs = Math.round(verified.reduce((sum,p) => sum + (p.principalGhs ?? 0), 0) * 100) / 100;
     const interestPaidGhs = Math.round(((tx.interestCollectedUpfront ? tx.interestGhs : 0) + verified.reduce((sum,p) => sum + (p.interestGhs ?? 0), 0)) * 100) / 100;
     const penaltyPaidGhs = Math.round(verified.reduce((sum,p) => sum + (p.penaltyGhs ?? 0), 0) * 100) / 100;
     if ((tx.principalAdjustmentGhs ?? 0) !== 0 || (tx.interestAdjustmentGhs ?? 0) !== 0 || (tx.penaltyAdjustmentGhs ?? 0) !== 0) {
       await ctx.db.patch(request._id, { activityError: "Adjusted credit requires Smart Trading owner review" });
-      return { skip: true as const };
+      return { skip: true as const, journey, requestId:request._id };
     }
-    const payload = { requestId: request._id, creditId: tx._id, principalPaidGhs, interestPaidGhs, penaltyPaidGhs, dueAt: tx.dueAt };
+    const payload = { requestId: request._id, creditId: tx._id, principalPaidGhs, interestPaidGhs, penaltyPaidGhs, journey, dueAt: tx.dueAt };
     const fingerprint = JSON.stringify(payload);
     return { skip: false as const, payload, fingerprint, previous: request.lastActivityHash };
   },
@@ -147,7 +150,11 @@ export const deliverActivities = internalAction({
     for (let i=0; i<20; i++) {
       const event = await ctx.runMutation(internal.smartTrading.claimActivity, {});
       if (!event) break;
-      if (event.skip || event.fingerprint === event.previous) continue;
+      if(event.skip){
+        if(event.journey)await fetch(new URL("/api/bridge/journey",config.requestUrl),{method:"POST",redirect:"error",headers:{"Content-Type":"application/json",Authorization:"Bearer "+config.bridgeSecret},body:JSON.stringify({requestId:event.requestId,journey:event.journey,sourceAt:new Date().toISOString()})});
+        continue;
+      }
+      if(event.fingerprint===event.previous)continue;
       const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(event.fingerprint));
       const eventId = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2,"0")).join("");
       let error: string | undefined;
@@ -170,6 +177,7 @@ export const demoHistory = internalQuery({
     if(!driver)return null;
     const credits=await ctx.db.query("transactions").withIndex("by_driver",q=>q.eq("driverId",driver._id)).collect();
     const payments=await ctx.db.query("payments").withIndex("by_driver",q=>q.eq("driverId",driver._id)).collect();
+    const faults=await ctx.db.query("complaints").withIndex("by_driver",q=>q.eq("driverId",driver._id)).collect();
     return {driver:driver._id,asOf:Date.now(),credits:credits.map(tx=>{
       const receipts=payments.filter(p=>p.transactionId===tx._id);
       const verified=receipts.filter(p=>p.reconciliationStatus==="verified");
@@ -179,7 +187,7 @@ export const demoHistory = internalQuery({
       const review=!!(tx.principalAdjustmentGhs||tx.interestAdjustmentGhs||tx.penaltyAdjustmentGhs)
         ||receipts.some(p=>p.reconciliationStatus!=="verified"||p.principalGhs===undefined||p.interestGhs===undefined||p.penaltyGhs===undefined)
         || Math.round((tx.amountPaidGhs??0)*100)!==booked;
-      return {id:tx._id,issued:tx.issuedAt,due:tx.dueAt,status:tx.status,amount:Math.round(tx.fuelAmountGhs*100),principal,interestPaid:tx.interestGhs>0&&interest>=Math.round(tx.interestGhs*100),review,
+      return {journey:traderJourney(tx,receipts,faults),id:tx._id,issued:tx.issuedAt,due:tx.dueAt,status:tx.status,amount:Math.round(tx.fuelAmountGhs*100),principal,interestPaid:tx.interestGhs>0&&interest>=Math.round(tx.interestGhs*100),review,
         receipts:receipts.map(p=>({date:p.recordedAt,status:p.reconciliationStatus??"unverified",principal:p.principalGhs===undefined?null:Math.round(p.principalGhs*100),penalty:p.penaltyGhs===undefined?null:Math.round(p.penaltyGhs*100)}))};
     })};
   },

@@ -112,6 +112,6 @@ it("links only the exact request to a 10% fuel issue and exports verified compon
     expect(event.payload.principalPaidGhs).toBe(100);
     expect(event.payload.interestPaidGhs).toBe(50);
     expect(event.payload.penaltyPaidGhs).toBe(0);
-    expect(Object.keys(event.payload).sort()).toEqual(["requestId", "creditId", "principalPaidGhs", "interestPaidGhs", "penaltyPaidGhs", "dueAt"].sort());
+    expect(Object.keys(event.payload).sort()).toEqual(["journey","requestId", "creditId", "principalPaidGhs", "interestPaidGhs", "penaltyPaidGhs", "dueAt"].sort());
   }
 });
