@@ -184,3 +184,22 @@ export const demoHistory = internalQuery({
     })};
   },
 });
+
+export const syncDemoHistory = internalAction({
+  args:{},handler:async(ctx):Promise<void>=>{
+    const config=await ctx.runQuery(internal.smartTrading.connection,{});
+    if(!config)return;
+    const url=new URL("/api/bridge/demo",config.requestUrl);
+    if(url.origin!=="https://smart-trading-bryt.brytcity.chatgpt.site")return;
+    const headers={Authorization:"Bearer "+config.bridgeSecret,"Content-Type":"application/json"};
+    const response=await fetch(url,{headers,redirect:"error"});
+    if(!response.ok)throw new Error("Demo queue unavailable: "+response.status);
+    const jobs=await response.json() as {account:string;code:string;ticket:string}[];
+    for(const job of jobs){
+      const feed=await ctx.runQuery(internal.smartTrading.demoHistory,{account:job.account});
+      const payload=feed?{credits:feed.credits,asOf:feed.asOf}:{missing:true};
+      const sent=await fetch(url,{method:"POST",headers,redirect:"error",body:JSON.stringify({code:job.code,ticket:job.ticket,...payload})});
+      if(!sent.ok)console.error("Demo history delivery failed",sent.status);
+    }
+  }
+});
