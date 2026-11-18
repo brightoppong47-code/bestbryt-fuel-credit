@@ -16,7 +16,10 @@ export const claimRequest = internalMutation({
     if (!request) return null;
     const attempts = request.attempts + 1;
     await ctx.db.patch(request._id, { attempts, nextAttemptAt: now + 60_000 });
-    return { requestId: request._id, tradingCode: request.tradingCode,
+    return { ...(request.previousRequestId?{previousRequestId:request.previousRequestId}:{}),
+      ...(request.previousCreditId?{previousCreditId:request.previousCreditId}:{}),
+      ...(request.afterDriverPause?{afterDriverPause:true}:{}),
+      requestId: request._id, tradingCode: request.tradingCode,
       vehicleType: request.vehicleType, requestedAmountGhs: request.requestedAmountGhs,
       createdAt: request.createdAt, attempts };
   },

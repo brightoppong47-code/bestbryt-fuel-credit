@@ -68,6 +68,7 @@ export default defineSchema({
 
   drivers: defineTable({
     smartTradingCode: v.optional(v.string()),
+    pausedTradingAt: v.optional(v.number()),
     // Identity
     fullName: v.string(),
     phone: v.string(),
@@ -107,6 +108,9 @@ export default defineSchema({
 
   // Registration requests are separate from issued fuel and customer balances.
   smart_trading_requests: defineTable({
+    previousRequestId: v.optional(v.id("smart_trading_requests")),
+    previousCreditId: v.optional(v.id("transactions")),
+    afterDriverPause: v.optional(v.boolean()),
     driverId: v.id("drivers"),
     tradingCode: v.string(),
     branchId: v.id("branches"),

@@ -30,9 +30,9 @@ async function nextTradingCode(ctx: MutationCtx) {
     return `SMART-${padSequence(tradingSequence)}`;
 }
 async function queueRequest(ctx: MutationCtx, driverId: Id<"drivers">, tradingCode: string, branchId: Id<"branches">,
-  vehicleType: string, requestedAmount: number, createdBy: Id<"users">) {
+  vehicleType: string, requestedAmount: number, createdBy: Id<"users">, routing: {previousRequestId?:Id<"smart_trading_requests">,previousCreditId?:Id<"transactions">,afterDriverPause?:boolean} = {}) {
       await ctx.db.insert("smart_trading_requests", {
-        driverId, tradingCode, branchId: branchId, vehicleType: vehicleType,
+        ...routing, driverId, tradingCode, branchId: branchId, vehicleType: vehicleType,
         requestedAmountGhs: Math.round(requestedAmount * 100) / 100,
         createdBy: createdBy, createdAt: new Date().toISOString(),
         deliveryStatus: "queued", nextAttemptAt: Date.now(), attempts: 0,
@@ -40,6 +40,14 @@ async function queueRequest(ctx: MutationCtx, driverId: Id<"drivers">, tradingCo
       const connection = await ctx.db.query("smart_trading_connection").withIndex("by_key", q => q.eq("key", "global")).unique();
       if (connection || (process.env.SMART_TRADING_REQUEST_URL && process.env.SMART_TRADING_BRIDGE_SECRET)) await ctx.scheduler.runAfter(0, internal.smartTrading.deliverRequests, {});
 }
+
+export const recordFuelBreak = mutation({
+  args: {driverId:v.id("drivers")},
+  handler: async(ctx,{driverId})=>{
+    const driver=await assertDriverAccess(ctx,await requireStaff(ctx),driverId);
+    if(!driver.pausedTradingAt)await ctx.db.patch(driverId,{pausedTradingAt:Date.now()});
+  }
+});
 
 export const requestFuelAgain = mutation({
   args: {driverId:v.id("drivers"),amount:v.number()},
@@ -57,7 +65,11 @@ export const requestFuelAgain = mutation({
     }
     const code=driver.smartTradingCode??await nextTradingCode(ctx);
     if(!driver.smartTradingCode)await ctx.db.patch(driverId,{smartTradingCode:code});
-    await queueRequest(ctx,driverId,code,driver.branchId,driver.vehicleType,amount,user._id);
+    const previousCreditId=latest?.transactionId??(await ctx.db.query("transactions").withIndex("by_driver",q=>q.eq("driverId",driverId)).order("desc").first())?._id;
+    await queueRequest(ctx,driverId,code,driver.branchId,driver.vehicleType,amount,user._id,{
+      previousRequestId:latest?._id,previousCreditId,afterDriverPause:Boolean(driver.pausedTradingAt)
+    });
+    if(driver.pausedTradingAt)await ctx.db.patch(driverId,{pausedTradingAt:undefined});
   }
 });
 

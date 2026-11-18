@@ -34,6 +34,7 @@ export default function DriverProfilePage() {
     driverId ? { driverId: driverId as Id<"drivers"> } : "skip",
     { initialNumItems: 20 }
   );
+  const recordBreak=useMutation(api.drivers.recordFuelBreak);
   const requestAgain=useMutation(api.drivers.requestFuelAgain);
   const [requestAmount,setRequestAmount]=useState("");
   const [requestBusy,setRequestBusy]=useState(false);
@@ -143,7 +144,15 @@ export default function DriverProfilePage() {
 
       {driver.isActive&&(!driver.tradingRequest||driver.tradingRequest.transactionId)&&<Card>
         <CardHeader><CardTitle>Request fuel again</CardTitle></CardHeader>
-        <CardContent><form className="flex flex-wrap items-end gap-3" onSubmit={async e=>{
+        <CardContent><p className="mb-3 text-sm">{driver.pausedTradingAt?"Break recorded. The next fuel request will be open to all traders.":"The next request goes to the trader who last funded this driver. Drivers without a current trader appear on the market."}</p>
+        {!driver.pausedTradingAt&&<Button variant="outline" className="mb-3" disabled={requestBusy} onClick={async()=>{
+          if(!window.confirm("Did the driver say they will stop taking fuel? Their next request will be open to all traders."))return;
+          setRequestBusy(true);
+          try{await recordBreak({driverId:driver._id});toast.success("Driver’s break recorded.");}
+          catch{toast.error("Unable to record the break. Please try again.");}
+          finally{setRequestBusy(false);}
+        }}>Driver taking a break</Button>}
+        <form className="flex flex-wrap items-end gap-3" onSubmit={async e=>{
           e.preventDefault();setRequestBusy(true);
           try{await requestAgain({driverId:driver._id,amount:Number(requestAmount)});setRequestAmount("");toast.success("Fuel request queued for Smart Trading.");}
           catch(error){const detail=(error as {data?:{message?:string}}).data;toast.error(detail?.message??"Unable to submit the request. Please try again.");}
