@@ -1,6 +1,7 @@
 import { isBranchStaff, assignedBranchIds, canAccessBranch, assertBranchAccess, assertDriverAccess } from "./helpers";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { requireStaff } from "./helpers";
 import { paginationOptsValidator } from "convex/server";
 
@@ -94,6 +95,8 @@ export const registerDriver = mutation({
         createdBy: user._id, createdAt: new Date().toISOString(),
         deliveryStatus: "queued", nextAttemptAt: Date.now(), attempts: 0,
       });
+      const connection = await ctx.db.query("smart_trading_connection").withIndex("by_key", q => q.eq("key", "global")).unique();
+      if (connection || (process.env.SMART_TRADING_REQUEST_URL && process.env.SMART_TRADING_BRIDGE_SECRET)) await ctx.scheduler.runAfter(0, internal.smartTrading.deliverRequests, {});
     }
     return driverId;
   },

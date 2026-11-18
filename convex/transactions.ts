@@ -3,6 +3,7 @@ import { penaltyDays } from "./lib/penaltyDays";
 import { adjustedBalance } from "./lib/adjustedBalance";
 import { allocatePayment } from "./lib/paymentAllocation";
 import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { requireStaff, requireRiskManagerOrOwner } from "./helpers";
 import { paginationOptsValidator } from "convex/server";
@@ -114,7 +115,11 @@ export const issueCredit = mutation({
       notes: args.notes,
       issuedBy: user._id,
     });
-    if (args.smartTradingRequestId) await ctx.db.patch(args.smartTradingRequestId, { transactionId, nextActivityAt: Date.now() });
+    if (args.smartTradingRequestId) {
+      await ctx.db.patch(args.smartTradingRequestId, { transactionId, nextActivityAt: Date.now() });
+      const connection = await ctx.db.query("smart_trading_connection").withIndex("by_key", q => q.eq("key", "global")).unique();
+      if (connection) await ctx.scheduler.runAfter(0, internal.smartTrading.deliverActivities, {});
+    }
     return transactionId;
   },
 });
