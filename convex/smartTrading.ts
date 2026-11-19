@@ -214,3 +214,30 @@ export const syncDemoHistory = internalAction({
     }
   }
 });
+
+export const activeDirectoryPage = internalQuery({
+  args:{cursor:v.union(v.string(),v.null())},
+  handler:async(ctx,{cursor})=>{
+    const page=await ctx.db.query("drivers").paginate({cursor,numItems:25});
+    return {done:page.isDone,cursor:page.continueCursor,drivers:page.page.filter(d=>d.isActive)
+      .map(d=>({account:d.accountNumber,code:d.smartTradingCode??null}))};
+  }
+});
+
+export const syncActiveDirectory = internalAction({
+  args:{cursor:v.optional(v.string()),started:v.optional(v.number()),total:v.optional(v.number())},
+  handler:async(ctx,args):Promise<void>=>{
+    const config=await ctx.runQuery(internal.smartTrading.connection,{});
+    if(!config)return;
+    const url=new URL("/api/bridge/drivers",config.requestUrl);
+    if(url.origin!=="https://smart-trading-bryt.brytcity.chatgpt.site")return;
+    const started=args.started??Date.now();
+    const page=await ctx.runQuery(internal.smartTrading.activeDirectoryPage,{cursor:args.cursor??null});
+    const total=(args.total??0)+page.drivers.length;
+    const response=await fetch(url,{method:"POST",redirect:"error",signal:AbortSignal.timeout(15000),
+      headers:{"Content-Type":"application/json",Authorization:"Bearer "+config.bridgeSecret,"OAI-Sites-Authorization":"Bearer "+config.sitesToken},
+      body:JSON.stringify({started,drivers:page.drivers,done:page.done,total})});
+    if(!response.ok)throw new Error("Driver directory sync failed: "+response.status);
+    if(!page.done)await ctx.scheduler.runAfter(0,internal.smartTrading.syncActiveDirectory,{started,cursor:page.cursor,total});
+  }
+});

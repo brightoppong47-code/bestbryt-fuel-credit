@@ -133,3 +133,14 @@ it("reopens a settled driver under the same code only after a fresh request",asy
   expect(next._id).not.toBe(first._id);
   await expect(again()).rejects.toThrow("open fuel request");
 });
+
+it("exports only active accounts and trading aliases in the driver directory",async()=>{
+  const {t,owner,registration}=await fixture();
+  const first=await owner.mutation(api.drivers.registerDriver,registration);
+  const second=await owner.mutation(api.drivers.registerDriver,registration);
+  await t.run(ctx=>ctx.db.patch(second,{isActive:false}));
+  const driver=await t.run(ctx=>ctx.db.get(first));
+  const page=await t.query(internal.smartTrading.activeDirectoryPage,{cursor:null});
+  expect(page.done).toBe(true);
+  expect(page.drivers).toEqual([{account:driver!.accountNumber,code:driver!.smartTradingCode}]);
+});
