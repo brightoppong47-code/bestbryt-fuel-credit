@@ -1,3 +1,4 @@
+import { readInterestRatePercent } from "./appSettings";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireOwner } from "./helpers";
@@ -31,7 +32,7 @@ export const adjust = mutation({
     const old = tx[field] ?? 0;
     const next = round(old + args.deltaGhs);
     const proposed = { ...tx, [field]: next };
-    const balance = adjustedBalance(proposed, new Date());
+    const balance = adjustedBalance(proposed, new Date(), (await readInterestRatePercent(ctx)) / 100);
     if (!balance.valid) {
       throw new ConvexError({ code: "BAD_REQUEST", message: "Adjustment would create a negative charge or reduce the debt below recorded payments" });
     }

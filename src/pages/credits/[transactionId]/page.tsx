@@ -372,7 +372,7 @@ export default function TransactionDetailPage() {
             <>
               <Row
                 icon={<ShieldAlert className="w-4 h-4" />}
-                label="Penalty (5% per day, excluding Sundays)"
+                label={`Penalty (${tx.penaltyRatePercent}% per day, excluding Sundays)`}
                 value={`+ GHS ${fmt(tx.livePenalty)}`}
                 className="text-red-600 dark:text-red-400"
               />

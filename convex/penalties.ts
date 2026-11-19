@@ -1,7 +1,7 @@
-import { penaltyDays } from "./lib/penaltyDays";
+import { adjustedBalance } from "./lib/adjustedBalance";
+import { readInterestRatePercent } from "./appSettings";
 import { internalMutation } from "./_generated/server";
 
-const PENALTY_RATE = 0.05;
 
 /** Calculate how many full days overdue a transaction is (0 if not overdue) */
 function overdueDays(dueAt: string, now: Date): number {
@@ -19,6 +19,7 @@ export const updatePenaltiesAndStatuses = internalMutation({
   args: {},
   handler: async (ctx): Promise<{ updated: number }> => {
     const now = new Date();
+    const penaltyRate = (await readInterestRatePercent(ctx)) / 100;
 
     // Collect all open transactions (both pending and overdue)
     const pending = await ctx.db
@@ -42,10 +43,7 @@ export const updatePenaltiesAndStatuses = internalMutation({
 
       const days = overdueDays(tx.dueAt, now);
       const newStatus: "pending" | "overdue" = days > 0 ? "overdue" : "pending";
-      const newPenalty =
-        days > 0
-          ? Math.round(tx.totalOwedGhs * PENALTY_RATE * penaltyDays(tx.dueAt, now) * 100) / 100
-          : 0;
+      const newPenalty = adjustedBalance(tx, now, penaltyRate).penalty;
 
       // Only write if something has actually changed
       if (tx.status !== newStatus || tx.penaltyGhs !== newPenalty) {

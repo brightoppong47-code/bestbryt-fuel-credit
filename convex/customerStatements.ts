@@ -1,3 +1,4 @@
+import { readInterestRatePercent } from "./appSettings";
 import { ConvexError, v } from "convex/values";
 import { query } from "./_generated/server";
 import { assertDriverAccess, requireStaff } from "./helpers";
@@ -38,9 +39,10 @@ export const statement = query({
     const inRange = allRows.filter(r => r.date.slice(0,10) >= args.fromDate && r.date.slice(0,10) <= args.toDate);
     let running = money(before.reduce((s,r) => s+r.debitGhs-r.creditGhs,0));
     for (const r of inRange) { running = money(running+r.debitGhs-r.creditGhs); rows.push(r); }
+    const penaltyRate = (await readInterestRatePercent(ctx)) / 100;
     const now = new Date();
-    const currentOutstandingGhs = money(transactions.reduce((s,t) => s+(t.status === "paid" ? 0 : adjustedBalance(t,now).remaining),0));
-    const currentPenaltyGhs = money(transactions.filter(t => t.status !== "paid").reduce((s,t) => s+adjustedBalance(t,now).penalty,0));
+    const currentOutstandingGhs = money(transactions.reduce((s,t) => s+(t.status === "paid" ? 0 : adjustedBalance(t,now,penaltyRate).remaining),0));
+    const currentPenaltyGhs = money(transactions.filter(t => t.status !== "paid").reduce((s,t) => s+adjustedBalance(t,now,penaltyRate).penalty,0));
     return {
       customer: { name: driver.fullName, account: driver.accountNumber, phone: driver.phone, branch: branch?.name ?? "Unknown branch" },
       fromDate: args.fromDate, toDate: args.toDate, generatedAt: now.toISOString(),
