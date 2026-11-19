@@ -142,5 +142,8 @@ it("exports only active accounts and trading aliases in the driver directory",as
   const driver=await t.run(ctx=>ctx.db.get(first));
   const page=await t.query(internal.smartTrading.activeDirectoryPage,{cursor:null});
   expect(page.done).toBe(true);
-  expect(page.drivers).toEqual([{account:driver!.accountNumber,code:driver!.smartTradingCode}]);
+  expect(page.drivers).toEqual([{account:driver!.accountNumber,code:driver!.smartTradingCode,pausedAt:null}]);
+  await owner.mutation(api.drivers.recordFuelBreak,{driverId:first});
+  const paused=await t.query(internal.smartTrading.activeDirectoryPage,{cursor:null});
+  expect(paused.drivers[0].pausedAt).toEqual(expect.any(Number));
 });
