@@ -220,7 +220,7 @@ export const activeDirectoryPage = internalQuery({
   handler:async(ctx,{cursor})=>{
     const page=await ctx.db.query("drivers").paginate({cursor,numItems:25});
     return {done:page.isDone,cursor:page.continueCursor,drivers:page.page.filter(d=>d.isActive)
-      .map(d=>({account:d.accountNumber,code:d.smartTradingCode??null}))};
+      .map(d=>({account:d.accountNumber,code:d.smartTradingCode??null,pausedAt:d.pausedTradingAt??null}))};
   }
 });
 
