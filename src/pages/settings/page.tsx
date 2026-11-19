@@ -361,7 +361,7 @@ function InterestRateSettings() {
   return <Card>
     <CardHeader><CardTitle>Interest percentage</CardTitle></CardHeader>
     <CardContent className="space-y-4">
-      <p className="text-sm text-muted-foreground">Applied to new fuel credits. Existing credits retain their original interest rate and amount.</p>
+      <p className="text-sm text-muted-foreground">Applied to new fuel credits. Existing credits retain their original interest rate and amount. The same percentage is used for daily penalties on open overdue credits, excluding Sundays.</p>
       <div className="space-y-2 max-w-sm">
         <Label htmlFor="interest-percentage">Interest percentage (%)</Label>
         <Input id="interest-percentage" type="number" min="0" step="any" value={value} onChange={e => setDraft(e.target.value)} disabled={saving} />
@@ -669,7 +669,7 @@ export default function SettingsPage() {
               <p><span className="font-medium text-foreground">Account Format:</span> <span className="font-mono text-primary">BBV-{"{BRANCH}"}-{"{000001}"}</span></p>
               <p><span className="font-medium text-foreground">Interest Rate:</span> {appSettings?.interestRatePercent ?? 5}% per transaction</p>
               <p><span className="font-medium text-foreground">Due Period:</span> 24 hours</p>
-              <p><span className="font-medium text-foreground">Penalty:</span> 5% per overdue day, Monday–Saturday (Sunday excluded)</p>
+              <p><span className="font-medium text-foreground">Penalty:</span> {appSettings?.interestRatePercent ?? 5}% per overdue day, Monday–Saturday (Sunday excluded)</p>
               <p><span className="font-medium text-foreground">Currency:</span> Ghana Cedis (GHS)</p>
             </CardContent>
           </Card>

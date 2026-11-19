@@ -9,7 +9,6 @@ import { requireStaff, requireRiskManagerOrOwner } from "./helpers";
 import { paginationOptsValidator } from "convex/server";
 
 import { readInterestRatePercent } from "./appSettings";
-const PENALTY_RATE = 0.05;
 const DUE_HOURS = 24;
 
 /** Add hours to an ISO string */
@@ -34,6 +33,7 @@ export const issueCredit = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const penaltyRate = (await readInterestRatePercent(ctx)) / 100;
     const user = await requireStaff(ctx);
 
     if (args.fuelAmountGhs <= 0) {
@@ -66,7 +66,7 @@ export const issueCredit = mutation({
       for (const tx of openTxs) {
         if (tx.status === "paid") continue;
         const days = overdueDays(tx.dueAt, now);
-        const liveTotal = adjustedBalance(tx, now, PENALTY_RATE).total;
+        const liveTotal = adjustedBalance(tx, now, penaltyRate).total;
         totalArrears += liveTotal;
         totalPaid += tx.amountPaidGhs ?? 0;
       }
@@ -132,6 +132,7 @@ export const markPaid = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const penaltyRate = (await readInterestRatePercent(ctx)) / 100;
     const user = await requireStaff(ctx);
     await assertTransactionAccess(ctx, user, args.transactionId);
     const tx = await ctx.db.get(args.transactionId);
@@ -144,7 +145,7 @@ export const markPaid = mutation({
       throw new ConvexError({ message: "Payment reference is too long", code: "BAD_REQUEST" });
     const now = new Date();
     const days = overdueDays(tx.dueAt, now);
-    const balance = adjustedBalance(tx, now, PENALTY_RATE);
+    const balance = adjustedBalance(tx, now, penaltyRate);
     if (!balance.valid) throw new ConvexError({ message: "Invalid adjusted balance; owner review required", code: "CONFLICT" });
     const penaltyGhs = balance.penalty;
     const liveTotal = balance.total;
@@ -189,6 +190,7 @@ export const recordPayment = mutation({
     note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const penaltyRate = (await readInterestRatePercent(ctx)) / 100;
     const user = await requireStaff(ctx);
     await assertTransactionAccess(ctx, user, args.transactionId);
     const tx = await ctx.db.get(args.transactionId);
@@ -202,7 +204,7 @@ export const recordPayment = mutation({
       throw new ConvexError({ message: "Payment reference is too long", code: "BAD_REQUEST" });
     const now = new Date();
     const days = overdueDays(tx.dueAt, now);
-    const balance = adjustedBalance(tx, now, PENALTY_RATE);
+    const balance = adjustedBalance(tx, now, penaltyRate);
     if (!balance.valid) throw new ConvexError({ message: "Invalid adjusted balance; owner review required", code: "CONFLICT" });
     const penaltyGhs = balance.penalty;
     const liveTotal = balance.total;
@@ -272,6 +274,7 @@ export const getPayments = query({
 export const refreshPenalties = mutation({
   args: { transactionId: v.id("transactions") },
   handler: async (ctx, args) => {
+    const penaltyRate = (await readInterestRatePercent(ctx)) / 100;
     const user = await requireStaff(ctx);
     await assertTransactionAccess(ctx, user, args.transactionId);
     const tx = await ctx.db.get(args.transactionId);
@@ -280,7 +283,7 @@ export const refreshPenalties = mutation({
     const now = new Date();
     const days = overdueDays(tx.dueAt, now);
     const newStatus = days > 0 ? "overdue" : "pending";
-    const balance = adjustedBalance(tx, now, PENALTY_RATE);
+    const balance = adjustedBalance(tx, now, penaltyRate);
     if (!balance.valid) throw new ConvexError({ message: "Invalid adjusted balance", code: "CONFLICT" });
     const penaltyGhs = balance.penalty;
 
@@ -300,6 +303,7 @@ export const listTransactions = query({
     status: v.optional(v.union(v.literal("pending"), v.literal("paid"), v.literal("overdue"))),
   },
   handler: async (ctx, args) => {
+    const penaltyRate = (await readInterestRatePercent(ctx)) / 100;
     const user = await requireStaff(ctx);
 
     // Branch secretaries are scoped to their branch's drivers
@@ -343,7 +347,7 @@ export const listTransactions = query({
 
         const now = new Date();
         const days = tx.status !== "paid" ? overdueDays(tx.dueAt, now) : 0;
-        const adjusted = adjustedBalance(tx, now, PENALTY_RATE);
+        const adjusted = adjustedBalance(tx, now, penaltyRate);
         const livePenalty = adjusted.penalty;
         const liveTotal = adjusted.total;
         const liveStatus: "pending" | "paid" | "overdue" =
@@ -369,6 +373,7 @@ export const listTransactions = query({
 export const getTransaction = query({
   args: { transactionId: v.id("transactions") },
   handler: async (ctx, args) => {
+    const penaltyRate = (await readInterestRatePercent(ctx)) / 100;
     const user = await requireStaff(ctx);
     await assertTransactionAccess(ctx, user, args.transactionId);
     const tx = await ctx.db.get(args.transactionId);
@@ -376,7 +381,7 @@ export const getTransaction = query({
     const driver = await ctx.db.get(tx.driverId);
     const now = new Date();
     const days = tx.status !== "paid" ? overdueDays(tx.dueAt, now) : 0;
-    const adjusted = adjustedBalance(tx, now, PENALTY_RATE);
+    const adjusted = adjustedBalance(tx, now, penaltyRate);
     const livePenalty = adjusted.penalty;
     const liveTotal = adjusted.total;
     const liveStatus: "pending" | "paid" | "overdue" =
@@ -389,6 +394,7 @@ export const getTransaction = query({
       overdueDays: days,
       amountPaidGhs: tx.amountPaidGhs ?? 0,
       remainingGhs: adjusted.remaining,
+      penaltyRatePercent: penaltyRate * 100,
       driver,
     };
   },
@@ -402,6 +408,7 @@ export const getDriverBalance = query({
     overdueCount: number;
     paidCount: number;
   }> => {
+    const penaltyRate = (await readInterestRatePercent(ctx)) / 100;
     const user = await requireStaff(ctx);
     await assertDriverAccess(ctx, user, args.driverId);
     const txs = await ctx.db
@@ -418,7 +425,7 @@ export const getDriverBalance = query({
     for (const tx of txs) {
       if (tx.status === "paid") { paidCount++; continue; }
       const days = overdueDays(tx.dueAt, now);
-      const balance = adjustedBalance(tx, now, PENALTY_RATE);
+      const balance = adjustedBalance(tx, now, penaltyRate);
       const remaining = balance.remaining;
       totalOwed += remaining;
       if (days > 0) overdueCount++;
@@ -444,6 +451,7 @@ export const getDashboardStats = query({
     creditsTodayGhs: number;
     pendingCount: number;
   }> => {
+    const penaltyRate = (await readInterestRatePercent(ctx)) / 100;
     const user = await requireStaff(ctx);
     const allowedDrivers = await accessibleDriverIds(ctx, user);
     const now = new Date();
@@ -459,7 +467,7 @@ export const getDashboardStats = query({
     let overdueCount = 0;
     for (const tx of open) {
       const days = overdueDays(tx.dueAt, now);
-      const balance = adjustedBalance(tx, now, PENALTY_RATE);
+      const balance = adjustedBalance(tx, now, penaltyRate);
       const remaining = balance.remaining;
       totalOutstandingGhs += remaining;
       if (days > 0) overdueCount++;
@@ -528,6 +536,7 @@ export const getDailySummary = query({
 export const getOutstandingBalances = query({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
+    const penaltyRate = (await readInterestRatePercent(ctx)) / 100;
     const user = await requireStaff(ctx);
     const allowedDrivers = await accessibleDriverIds(ctx, user);
     const now = new Date();
@@ -539,7 +548,7 @@ export const getOutstandingBalances = query({
     const enriched = await Promise.all(open.map(async (tx) => {
       const driver = await ctx.db.get(tx.driverId);
       const days = overdueDays(tx.dueAt, now);
-      const balance = adjustedBalance(tx, now, PENALTY_RATE);
+      const balance = adjustedBalance(tx, now, penaltyRate);
       const penalty = balance.penalty;
       const liveTotal = balance.total;
       const remaining = balance.remaining;
@@ -579,6 +588,7 @@ export const getOutstandingBalances = query({
 export const getOverdueAlerts = query({
   args: {},
   handler: async (ctx) => {
+    const penaltyRate = (await readInterestRatePercent(ctx)) / 100;
     const user = await requireRiskManagerOrOwner(ctx);
     const allowedDrivers = await accessibleDriverIds(ctx, user);
     const now = new Date();
@@ -601,7 +611,7 @@ export const getOverdueAlerts = query({
       if (msOverdue < THREE_DAYS_MS) continue;
 
       const days = Math.floor(msOverdue / (1000 * 60 * 60 * 24));
-      const balance = adjustedBalance(tx, now, PENALTY_RATE);
+      const balance = adjustedBalance(tx, now, penaltyRate);
       const penalty = balance.penalty;
       const liveTotal = balance.total;
       const remaining = balance.remaining;

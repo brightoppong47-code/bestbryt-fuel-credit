@@ -23,7 +23,7 @@ const money = (n: number) => Math.round(n * 100) / 100;
  * chargeable days already accrued by that date; later days can still accrue.
  * No historical payment row is changed by this calculation.
  */
-export function adjustedBalance(tx: AdjustableCredit, now: Date, penaltyRate = 0.05) {
+export function adjustedBalance(tx: AdjustableCredit, now: Date, penaltyRate: number) {
   const principal = money(tx.fuelAmountGhs + (tx.principalAdjustmentGhs ?? 0));
   const interest = money(tx.interestGhs + (tx.interestAdjustmentGhs ?? 0));
   const base = money(principal + (tx.interestCollectedUpfront ? 0 : interest));
