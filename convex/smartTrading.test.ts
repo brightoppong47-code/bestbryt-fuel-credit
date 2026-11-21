@@ -157,3 +157,17 @@ it("finds the assigned driver by Smart code across pages within permitted branch
   expect((await staff.query(api.drivers.listDrivers, { ...args, search: "SMART-000002" })).page).toEqual([]);
   expect((await owner.query(api.drivers.listDrivers, { ...args, branchId: ids.other })).page).toEqual([]);
 });
+
+it("links ordinary issues, reuses a matching request and wakes the correct trip on repayment", async () => {
+  const {t, owner, registration} = await fixture();
+  const driverId = await owner.mutation(api.drivers.registerDriver, {...registration, requestedFuelAmountGhs:200});
+  const issue = (fuelAmountGhs:number) => owner.mutation(api.transactions.issueCredit, {driverId, fuelAmountGhs, interestCollectedUpfront:true});
+  const first = await issue(200);
+  const next = await issue(150);
+  const requests = await t.run(ctx => ctx.db.query("smart_trading_requests").collect());
+  expect(requests.map(r => r.transactionId)).toEqual([first,next]);
+  expect(requests[1].previousRequestId).toBe(requests[0]._id);
+  await t.run(ctx => ctx.db.patch(requests[1]._id, {nextActivityAt:Date.now()+300000}));
+  await owner.mutation(api.transactions.markPaid,{transactionId:next});
+  expect((await t.run(ctx => ctx.db.get(requests[1]._id)))!.nextActivityAt).toBeLessThanOrEqual(Date.now());
+});

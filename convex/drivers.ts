@@ -1,9 +1,8 @@
 import { isBranchStaff, assignedBranchIds, canAccessBranch, assertBranchAccess, assertDriverAccess } from "./helpers";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
-import { internal } from "./_generated/api";
+import {nextTradingCode,queueRequest} from "./lib/tradingQueue";
+
 import { requireStaff } from "./helpers";
 import { paginationOptsValidator } from "convex/server";
 
@@ -19,26 +18,6 @@ export const generateUploadUrl = mutation({
 /** Pad a number to 6 digits: 1 → "000001" */
 function padSequence(n: number): string {
   return String(n).padStart(6, "0");
-}
-
-async function nextTradingCode(ctx: MutationCtx) {
-    const counter = await ctx.db.query("smart_trading_counters")
-      .withIndex("by_key", q => q.eq("key", "driver")).unique();
-    const tradingSequence = counter?.nextSequence ?? 1;
-    if (counter) await ctx.db.patch(counter._id, { nextSequence: tradingSequence + 1 });
-    else await ctx.db.insert("smart_trading_counters", { key: "driver", nextSequence: tradingSequence + 1 });
-    return `SMART-${padSequence(tradingSequence)}`;
-}
-async function queueRequest(ctx: MutationCtx, driverId: Id<"drivers">, tradingCode: string, branchId: Id<"branches">,
-  vehicleType: string, requestedAmount: number, createdBy: Id<"users">, routing: {previousRequestId?:Id<"smart_trading_requests">,previousCreditId?:Id<"transactions">,afterDriverPause?:boolean} = {}) {
-      await ctx.db.insert("smart_trading_requests", {
-        ...routing, driverId, tradingCode, branchId: branchId, vehicleType: vehicleType,
-        requestedAmountGhs: Math.round(requestedAmount * 100) / 100,
-        createdBy: createdBy, createdAt: new Date().toISOString(),
-        deliveryStatus: "queued", nextAttemptAt: Date.now(), attempts: 0,
-      });
-      const connection = await ctx.db.query("smart_trading_connection").withIndex("by_key", q => q.eq("key", "global")).unique();
-      if (connection || (process.env.SMART_TRADING_REQUEST_URL && process.env.SMART_TRADING_BRIDGE_SECRET)) await ctx.scheduler.runAfter(0, internal.smartTrading.deliverRequests, {});
 }
 
 export const recordFuelBreak = mutation({

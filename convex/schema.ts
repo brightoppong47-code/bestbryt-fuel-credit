@@ -130,6 +130,7 @@ export default defineSchema({
     lastError: v.optional(v.string()),
   }).index("by_driver", ["driverId"])
     .index("by_delivery", ["deliveryStatus", "nextAttemptAt"])
+    .index("by_transaction", ["transactionId"])
     .index("by_activity", ["nextActivityAt"]),
 
   // Each fuel credit issued to a driver

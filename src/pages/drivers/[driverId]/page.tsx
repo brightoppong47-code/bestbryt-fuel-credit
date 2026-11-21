@@ -35,8 +35,6 @@ export default function DriverProfilePage() {
     { initialNumItems: 20 }
   );
   const recordBreak=useMutation(api.drivers.recordFuelBreak);
-  const requestAgain=useMutation(api.drivers.requestFuelAgain);
-  const [requestAmount,setRequestAmount]=useState("");
   const [requestBusy,setRequestBusy]=useState(false);
   const updateDriver = useMutation(api.drivers.updateDriver);
   const currentUser = useConvexCurrentUser(convexApi.users.getCurrentUserData, {});
@@ -143,8 +141,8 @@ export default function DriverProfilePage() {
       )}
 
       {driver.isActive&&(!driver.tradingRequest||driver.tradingRequest.transactionId)&&<Card>
-        <CardHeader><CardTitle>Request fuel again</CardTitle></CardHeader>
-        <CardContent><p className="mb-3 text-sm">{driver.pausedTradingAt?"Break recorded. The next fuel request will be open to all traders.":"The next request goes to the trader who last funded this driver. Drivers without a current trader appear on the market."}</p>
+        <CardHeader><CardTitle>Smart Trading status</CardTitle></CardHeader>
+        <CardContent><p className="mb-3 text-sm">{driver.pausedTradingAt?"Break recorded. The next fuel request will be open to all traders.":"Use Issue Credit when the driver takes fuel. The issued amount goes to Smart Trading automatically."}</p>
         {!driver.pausedTradingAt&&<Button variant="outline" className="mb-3" disabled={requestBusy} onClick={async()=>{
           if(!window.confirm("Did the driver say they will stop taking fuel? Their next request will be open to all traders."))return;
           setRequestBusy(true);
@@ -152,13 +150,7 @@ export default function DriverProfilePage() {
           catch{toast.error("Unable to record the break. Please try again.");}
           finally{setRequestBusy(false);}
         }}>Driver taking a break</Button>}
-        <form className="flex flex-wrap items-end gap-3" onSubmit={async e=>{
-          e.preventDefault();setRequestBusy(true);
-          try{await requestAgain({driverId:driver._id,amount:Number(requestAmount)});setRequestAmount("");toast.success("Fuel request queued for Smart Trading.");}
-          catch(error){const detail=(error as {data?:{message?:string}}).data;toast.error(detail?.message??"Unable to submit the request. Please try again.");}
-          finally{setRequestBusy(false);}
-        }}><label>Fuel requested today (GH₵)<input className="block rounded border p-2" type="number" required min="0.01" max="10000000" step="0.01" value={requestAmount} onChange={e=>setRequestAmount(e.target.value)}/></label>
-        <Button type="submit" disabled={requestBusy}>Request fuel again</Button></form></CardContent>
+        </CardContent>
       </Card>}
 
       {/* Balance summary */}

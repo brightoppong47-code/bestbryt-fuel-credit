@@ -19,6 +19,7 @@ export const claimRequest = internalMutation({
     return { ...(request.previousRequestId?{previousRequestId:request.previousRequestId}:{}),
       ...(request.previousCreditId?{previousCreditId:request.previousCreditId}:{}),
       ...(request.afterDriverPause?{afterDriverPause:true}:{}),
+      ...(request.transactionId ? {issuedCreditId:request.transactionId} : {}),
       requestId: request._id, tradingCode: request.tradingCode,
       vehicleType: request.vehicleType, requestedAmountGhs: request.requestedAmountGhs,
       createdAt: request.createdAt, attempts };
@@ -36,7 +37,9 @@ export const finishDelivery = internalMutation({
         nextAttemptAt: Date.now() + Math.min(3_600_000, 60_000 * 2 ** Math.min(args.attempt, 6)),
       });
     } else {
+      if (request.transactionId) await ctx.scheduler.runAfter(0,internal.smartTrading.deliverActivities,{});
       await ctx.db.patch(request._id, {
+        ...(request.transactionId ? {nextActivityAt:Date.now()} : {}),
         deliveryStatus: "delivered", deliveredAt: new Date().toISOString(), lastError: undefined,
       });
     }
@@ -120,7 +123,7 @@ export const claimActivity = internalMutation({
     if (!tx) return { skip: true as const };
     const payments = await ctx.db.query("payments").withIndex("by_transaction", q => q.eq("transactionId", tx._id)).collect();
     const faults=await ctx.db.query("complaints").withIndex("by_driver",q=>q.eq("driverId",tx.driverId)).collect();
-    const journey=traderJourney(tx,payments,faults);
+    const journey={...traderJourney(tx,payments,faults),marketIssue:true};
     // Only reconciled receipts move trader money. Unknown legacy allocations need owner review.
     const verified = payments.filter(p => p.reconciliationStatus === "verified");
     if (verified.some(p => p.principalGhs === undefined || p.interestGhs === undefined || p.penaltyGhs === undefined)) {
@@ -181,6 +184,7 @@ export const demoHistory = internalQuery({
     const credits=await ctx.db.query("transactions").withIndex("by_driver",q=>q.eq("driverId",driver._id)).collect();
     const payments=await ctx.db.query("payments").withIndex("by_driver",q=>q.eq("driverId",driver._id)).collect();
     const faults=await ctx.db.query("complaints").withIndex("by_driver",q=>q.eq("driverId",driver._id)).collect();
+    const linked=new Set((await ctx.db.query("smart_trading_requests").withIndex("by_driver",q=>q.eq("driverId",driver._id)).collect()).map(r=>r.transactionId));
     return {driver:driver._id,asOf:Date.now(),credits:credits.map(tx=>{
       const receipts=payments.filter(p=>p.transactionId===tx._id);
       const verified=receipts.filter(p=>p.reconciliationStatus==="verified");
@@ -190,7 +194,7 @@ export const demoHistory = internalQuery({
       const review=!!(tx.principalAdjustmentGhs||tx.interestAdjustmentGhs||tx.penaltyAdjustmentGhs)
         ||receipts.some(p=>p.reconciliationStatus!=="verified"||p.principalGhs===undefined||p.interestGhs===undefined||p.penaltyGhs===undefined)
         || Math.round((tx.amountPaidGhs??0)*100)!==booked;
-      return {journey:traderJourney(tx,receipts,faults),id:tx._id,issued:tx.issuedAt,due:tx.dueAt,status:tx.status,amount:Math.round(tx.fuelAmountGhs*100),principal,interestPaid:tx.interestGhs>0&&interest>=Math.round(tx.interestGhs*100),review,
+      return {linked:linked.has(tx._id),journey:traderJourney(tx,receipts,faults),id:tx._id,issued:tx.issuedAt,due:tx.dueAt,status:tx.status,amount:Math.round(tx.fuelAmountGhs*100),principal,interestPaid:tx.interestGhs>0&&interest>=Math.round(tx.interestGhs*100),review,
         receipts:receipts.map(p=>({date:p.recordedAt,status:p.reconciliationStatus??"unverified",principal:p.principalGhs===undefined?null:Math.round(p.principalGhs*100),penalty:p.penaltyGhs===undefined?null:Math.round(p.penaltyGhs*100)}))};
     })};
   },

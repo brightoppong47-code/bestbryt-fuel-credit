@@ -1,3 +1,4 @@
+import {wakeTradingPayment} from "./lib/tradingQueue";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { assertBranchAccess, requireOwner, requireStaff } from "./helpers";
@@ -90,6 +91,7 @@ export const reviewPayment = mutation({
     if (!driver) throw new ConvexError({ code: "NOT_FOUND", message: "Customer not found" });
     const now = new Date().toISOString();
     await ctx.db.patch("payments", args.paymentId, { reconciliationStatus: args.decision, reconciledBy: owner._id, reconciledAt: now });
+    await wakeTradingPayment(ctx, payment.transactionId);
     await ctx.db.insert("collection_reconciliation_events", {
       branchId: payment.branchId ?? driver.branchId, paymentId: args.paymentId,
       action: args.decision === "verified" ? "verify" : "dispute",

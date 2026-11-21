@@ -1,3 +1,4 @@
+import {nextTradingCode, queueRequest, wakeTradingPayment} from "./lib/tradingQueue";
 import { assignedBranchIds, canAccessBranch, isBranchStaff, assertDriverAccess, assertTransactionAccess, accessibleDriverIds } from "./helpers";
 import { penaltyDays } from "./lib/penaltyDays";
 import { adjustedBalance } from "./lib/adjustedBalance";
@@ -115,10 +116,23 @@ export const issueCredit = mutation({
       notes: args.notes,
       issuedBy: user._id,
     });
-    if (args.smartTradingRequestId) {
-      await ctx.db.patch(args.smartTradingRequestId, { transactionId, nextActivityAt: Date.now() });
-      const connection = await ctx.db.query("smart_trading_connection").withIndex("by_key", q => q.eq("key", "global")).unique();
-      if (connection) await ctx.scheduler.runAfter(0, internal.smartTrading.deliverActivities, {});
+    const latest = await ctx.db.query("smart_trading_requests")
+      .withIndex("by_driver", q => q.eq("driverId", driver._id)).order("desc").first();
+    let requestId = args.smartTradingRequestId;
+    if (!requestId && latest && !latest.transactionId && latest.requestedAmountGhs === args.fuelAmountGhs) {
+      requestId = latest._id;
+    }
+    if (!requestId) {
+      const code = driver.smartTradingCode ?? await nextTradingCode(ctx);
+      if (!driver.smartTradingCode) await ctx.db.patch(driver._id, { smartTradingCode: code });
+      requestId = await queueRequest(ctx, driver._id, code, driver.branchId, driver.vehicleType,
+        args.fuelAmountGhs, user._id, { previousRequestId: latest?._id, previousCreditId: latest?.transactionId,
+          afterDriverPause: !!driver.pausedTradingAt });
+    }
+    if (driver.pausedTradingAt) await ctx.db.patch(driver._id, {pausedTradingAt: undefined});
+    await ctx.db.patch(requestId, {transactionId, nextActivityAt: Date.now()});
+    if (latest?._id === requestId && latest.deliveryStatus === "delivered") {
+      await ctx.scheduler.runAfter(0, internal.smartTrading.deliverActivities, {});
     }
     return transactionId;
   },
@@ -178,6 +192,7 @@ export const markPaid = mutation({
       paidBy: user._id,
       notes: args.notes ?? tx.notes,
     });
+    await wakeTradingPayment(ctx, args.transactionId);
   },
 });
 
@@ -247,6 +262,7 @@ export const recordPayment = mutation({
         : { status: days > 0 ? "overdue" : "pending" }),
     });
 
+    await wakeTradingPayment(ctx, args.transactionId);
     return { isFullyPaid, newAmountPaid, remaining: Math.max(0, liveTotal - newAmountPaid) };
   },
 });
