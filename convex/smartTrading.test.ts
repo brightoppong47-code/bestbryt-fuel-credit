@@ -147,3 +147,13 @@ it("exports only active accounts and trading aliases in the driver directory",as
   const paused=await t.query(internal.smartTrading.activeDirectoryPage,{cursor:null});
   expect(paused.drivers[0].pausedAt).toEqual(expect.any(Number));
 });
+
+it("finds the assigned driver by Smart code across pages within permitted branches", async () => {
+  const { owner, staff, ids, registration } = await fixture();
+  const first = await owner.mutation(api.drivers.registerDriver, { ...registration, requestedFuelAmountGhs: 100 });
+  await owner.mutation(api.drivers.registerDriver, { ...registration, branchId: ids.other, requestedFuelAmountGhs: 200 });
+  const args = { search: " smart 1 ", paginationOpts: { numItems: 1, cursor: null } };
+  expect((await staff.query(api.drivers.listDrivers, args)).page.map(d => d._id)).toEqual([first]);
+  expect((await staff.query(api.drivers.listDrivers, { ...args, search: "SMART-000002" })).page).toEqual([]);
+  expect((await owner.query(api.drivers.listDrivers, { ...args, branchId: ids.other })).page).toEqual([]);
+});

@@ -96,6 +96,7 @@ export default defineSchema({
   })
     .index("by_name", ["fullName"])
     .index("by_account_number", ["accountNumber"])
+    .index("by_smart_trading_code", ["smartTradingCode"])
     .index("by_branch", ["branchId"]),
 
   smart_trading_connection: defineTable({

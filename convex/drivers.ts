@@ -187,6 +187,17 @@ export const listDrivers = query({
     }
     const branchId = args.branchId ?? (isBranchStaff(user) && assignedBranchIds(user).length === 1 ? assignedBranchIds(user)[0] : undefined);
 
+    const codeMatch = /^smart[\s-]*(\d+)$/i.exec(args.search?.trim() ?? "");
+    if (codeMatch) {
+      const code = "SMART-" + codeMatch[1].padStart(6, "0");
+      const result = await ctx.db.query("drivers")
+        .withIndex("by_smart_trading_code", q => q.eq("smartTradingCode", code))
+        .paginate(args.paginationOpts);
+      return { ...result, page: result.page.filter(driver =>
+        canAccessBranch(user, driver.branchId) && (!branchId || driver.branchId === branchId)
+      ) };
+    }
+
     let result;
     if (branchId) {
       result = await ctx.db

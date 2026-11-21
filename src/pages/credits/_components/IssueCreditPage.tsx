@@ -171,7 +171,7 @@ export default function IssueCreditPage() {
             ) : (
               <div className="space-y-2">
                 <Input
-                  placeholder="Search by name, phone or account number..."
+                  placeholder="Search by Smart code, name, phone or account number"
                   value={driverSearch}
                   onChange={(e) => setDriverSearch(e.target.value)}
                 />
@@ -192,7 +192,7 @@ export default function IssueCreditPage() {
                           </div>
                           <div className="min-w-0">
                             <p className="text-sm font-medium truncate">{d.fullName}</p>
-                            <p className="text-xs text-muted-foreground font-mono">{d.accountNumber} · {d.phone}</p>
+                            <p className="text-xs text-muted-foreground font-mono">{d.accountNumber} · {d.phone}{d.smartTradingCode && " · " + d.smartTradingCode}</p>
                           </div>
                         </button>
                       ))

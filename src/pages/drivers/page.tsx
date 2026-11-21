@@ -54,7 +54,7 @@ export default function DriversPage() {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
-          placeholder="Search by name, phone or account number..."
+          placeholder="Search by Smart code, name, phone or account number"
           className="pl-9"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
@@ -112,7 +112,7 @@ export default function DriversPage() {
                 </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
                   <span className="text-xs font-mono text-primary flex items-center gap-1">
-                    <Hash className="w-3 h-3" /> {driver.accountNumber}
+                    <Hash className="w-3 h-3" /> {driver.accountNumber}{driver.smartTradingCode && " · " + driver.smartTradingCode}
                   </span>
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
                     <Phone className="w-3 h-3" /> {driver.phone}
