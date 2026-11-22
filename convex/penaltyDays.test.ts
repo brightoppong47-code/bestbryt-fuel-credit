@@ -25,3 +25,16 @@ it("matches a day-by-day reference for all starting weekdays and long periods", 
     }
   }
 });
+it("gives Saturday credits eight extra hours before the first Monday penalty", () => {
+  const issued="2026-11-21T06:00:00Z", due="2026-11-22T06:00:00Z";
+  for (const now of ["2026-11-22T20:00:00Z","2026-11-23T06:00:00Z","2026-11-23T13:59:59.999Z"]) expect(penaltyDays(due,new Date(now),issued)).toBe(0);
+  expect(penaltyDays(due,new Date("2026-11-23T14:00:00Z"),issued)).toBe(1);
+  expect(penaltyDays(due,new Date("2026-11-24T06:00:00Z"),issued)).toBe(2);
+  expect(penaltyDays(due,new Date("2026-11-30T06:00:00Z"),issued)).toBe(7);
+});
+it("handles late Saturday fuel whose eight-hour extension ends on Tuesday", () => {
+  const issued="2026-11-21T20:00:00Z", due="2026-11-22T20:00:00Z";
+  expect(penaltyDays(due,new Date("2026-11-24T03:59:59Z"),issued)).toBe(0);
+  expect(penaltyDays(due,new Date("2026-11-24T04:00:00Z"),issued)).toBe(1);
+  expect(penaltyDays(due,new Date("2026-11-24T20:00:00Z"),issued)).toBe(2);
+});

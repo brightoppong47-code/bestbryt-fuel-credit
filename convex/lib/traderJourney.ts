@@ -7,7 +7,7 @@ export function traderJourney(tx:Doc<"transactions">, payments:Doc<"payments">[]
   let collected=0;
   const paidDays:string[]=[];
   for(const receipt of receipts){
-    const days=penaltyDays(tx.dueAt,new Date(receipt.recordedAt));
+    const days=penaltyDays(tx.dueAt,new Date(receipt.recordedAt),tx.issuedAt);
     if(receipt.reconciliationStatus!=="verified"||!receipt.penaltyGhs||days<1||days>3)continue;
     collected+=Math.round(receipt.penaltyGhs*100);
     while(base>0&&paidDays.length<days&&collected>=Math.round(base*5*(paidDays.length+1))){

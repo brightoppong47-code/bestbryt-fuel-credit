@@ -1,6 +1,6 @@
 import {nextTradingCode, queueRequest, wakeTradingPayment} from "./lib/tradingQueue";
 import { assignedBranchIds, canAccessBranch, isBranchStaff, assertDriverAccess, assertTransactionAccess, accessibleDriverIds } from "./helpers";
-import { penaltyDays } from "./lib/penaltyDays";
+import { penaltyDays, saturdayMondayPenaltyStart } from "./lib/penaltyDays";
 import { adjustedBalance } from "./lib/adjustedBalance";
 import { allocatePayment } from "./lib/paymentAllocation";
 import { ConvexError, v } from "convex/values";
@@ -410,6 +410,7 @@ export const getTransaction = query({
       overdueDays: days,
       amountPaidGhs: tx.amountPaidGhs ?? 0,
       remainingGhs: adjusted.remaining,
+      mondayGraceUntil: saturdayMondayPenaltyStart(tx.dueAt, tx.issuedAt),
       penaltyRatePercent: penaltyRate * 100,
       driver,
     };

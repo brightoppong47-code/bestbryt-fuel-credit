@@ -66,6 +66,11 @@ export default defineSchema({
     createdBy: v.id("users"),
   }).index("by_code", ["code"]),
 
+  branch_cash_counts: defineTable({
+    branchId: v.id("branches"), amountGhs: v.number(), note: v.string(),
+    countedAt: v.number(), recordedBy: v.id("users"),
+  }).index("by_branch_time", ["branchId", "countedAt"]),
+
   drivers: defineTable({
     smartTradingCode: v.optional(v.string()),
     pausedTradingAt: v.optional(v.number()),

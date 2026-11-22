@@ -6,6 +6,7 @@ export type AdjustableCredit = {
   interestCollectedUpfront?: boolean;
   totalOwedGhs: number;
   dueAt: string;
+  issuedAt?: string;
   status: "pending" | "overdue" | "paid";
   penaltyGhs: number;
   principalAdjustmentGhs?: number;
@@ -27,9 +28,9 @@ export function adjustedBalance(tx: AdjustableCredit, now: Date, penaltyRate: nu
   const principal = money(tx.fuelAmountGhs + (tx.principalAdjustmentGhs ?? 0));
   const interest = money(tx.interestGhs + (tx.interestAdjustmentGhs ?? 0));
   const base = money(principal + (tx.interestCollectedUpfront ? 0 : interest));
-  const chargeableDays = penaltyDays(tx.dueAt, now);
+  const chargeableDays = penaltyDays(tx.dueAt, now, tx.issuedAt);
   const waivedDays = tx.penaltyWaivedThrough
-    ? Math.min(chargeableDays, penaltyDays(tx.dueAt, new Date(tx.penaltyWaivedThrough)))
+    ? Math.min(chargeableDays, penaltyDays(tx.dueAt, new Date(tx.penaltyWaivedThrough), tx.issuedAt))
     : 0;
   const pauseStart = tx.penaltyPausedAt ? new Date(tx.penaltyPausedAt) : undefined;
   const pauseEnd = tx.penaltyPausedUntil ? new Date(tx.penaltyPausedUntil) : undefined;
@@ -37,8 +38,8 @@ export function adjustedBalance(tx: AdjustableCredit, now: Date, penaltyRate: nu
   const pausedThrough = pauseValid ? new Date(Math.min(now.getTime(), pauseEnd!.getTime())) : undefined;
   // Waivers cover the earliest chargeable days. Exclude only paused days
   // beyond that boundary so overlapping waivers are not deducted twice.
-  const pauseStartDay = pauseStart ? penaltyDays(tx.dueAt, pauseStart) : 0;
-  const pauseEndDay = pausedThrough ? penaltyDays(tx.dueAt, pausedThrough) : 0;
+  const pauseStartDay = pauseStart ? penaltyDays(tx.dueAt, pauseStart, tx.issuedAt) : 0;
+  const pauseEndDay = pausedThrough ? penaltyDays(tx.dueAt, pausedThrough, tx.issuedAt) : 0;
   const pausedDays = pauseValid
     ? Math.max(0, pauseEndDay - Math.max(pauseStartDay, waivedDays))
     : 0;
