@@ -361,7 +361,7 @@ function InterestRateSettings() {
   return <Card>
     <CardHeader><CardTitle>Interest percentage</CardTitle></CardHeader>
     <CardContent className="space-y-4">
-      <p className="text-sm text-muted-foreground">Applied to new fuel credits. Existing credits retain their original interest rate and amount. The same percentage is used for daily penalties on open overdue credits, excluding Sundays.</p>
+      <p className="text-sm text-muted-foreground">Applied to new fuel credits. Existing credits retain their original interest rate and amount. The same percentage is used for daily penalties on open overdue credits, excluding Sundays. Saturday fuel credits receive eight extra hours before their first Monday penalty.</p>
       <div className="space-y-2 max-w-sm">
         <Label htmlFor="interest-percentage">Interest percentage (%)</Label>
         <Input id="interest-percentage" type="number" min="0" step="any" value={value} onChange={e => setDraft(e.target.value)} disabled={saving} />

@@ -1,3 +1,4 @@
+import BranchCapitalReport from "./_components/BranchCapitalReport";
 import CollectionsReport from "./_components/CollectionsReport.tsx";
 import CustomerPurchasesReport from "./_components/CustomerPurchasesReport.tsx";
 import CustomerStatementReport from "./_components/CustomerStatementReport.tsx";
@@ -311,6 +312,7 @@ function ReportsInner() {
       <TabsList aria-label="Report sections" className="grid w-full grid-cols-2 gap-1 !h-auto p-1.5 md:flex md:flex-wrap md:justify-start">
         <TabsTrigger value="collections" className="min-h-12 whitespace-normal text-center md:min-h-10">Collections</TabsTrigger>
         <TabsTrigger value="customers" className="min-h-12 whitespace-normal text-center md:min-h-10">Customer purchases</TabsTrigger>
+        {user?.role === "owner" && <TabsTrigger value="capital" className="min-h-12 whitespace-normal text-center md:min-h-10">Branch capital</TabsTrigger>}
         <TabsTrigger value="statement" className="min-h-12 whitespace-normal text-center md:min-h-10">Customer statement</TabsTrigger>
         {user?.role === "owner" && <TabsTrigger value="reconciliation" className="min-h-12 whitespace-normal text-center md:min-h-10">Reconciliation</TabsTrigger>}
         <TabsTrigger value="eod" className="min-h-12 whitespace-normal text-center md:min-h-10">End-of-day reports</TabsTrigger>
@@ -318,6 +320,7 @@ function ReportsInner() {
       </TabsList>
       <TabsContent value="collections" forceMount className="data-[state=inactive]:hidden"><ReportErrorBoundary title="Collections report"><CollectionsReport /></ReportErrorBoundary></TabsContent>
       <TabsContent value="customers" forceMount className="data-[state=inactive]:hidden"><ReportErrorBoundary title="Customer purchase report"><CustomerPurchasesReport /></ReportErrorBoundary></TabsContent>
+      {user?.role === "owner" && <TabsContent value="capital"><ReportErrorBoundary title="Branch capital"><BranchCapitalReport /></ReportErrorBoundary></TabsContent>}
       <TabsContent value="statement" forceMount className="data-[state=inactive]:hidden"><ReportErrorBoundary title="Customer statement"><CustomerStatementReport /></ReportErrorBoundary></TabsContent>
       {user?.role === "owner" && <TabsContent value="reconciliation" forceMount className="data-[state=inactive]:hidden"><ReportErrorBoundary title="Reconciliation report"><ReconciliationReport /></ReportErrorBoundary></TabsContent>}
       <TabsContent value="eod" forceMount className="data-[state=inactive]:hidden"><h2 className="text-base font-bold mb-3">Submitted branch end-of-day reports</h2>

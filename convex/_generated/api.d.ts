@@ -16,6 +16,7 @@ import type * as complaints from "../complaints.js";
 import type * as collectionReconciliation from "../collectionReconciliation.js";
 import type * as customerStatements from "../customerStatements.js";
 import type * as reconciliationQueue from "../reconciliationQueue.js";
+import type * as branchCapital from "../branchCapital.js";
 import type * as branches from "../branches.js";
 import type * as crons from "../crons.js";
 import type * as drivers from "../drivers.js";
@@ -44,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   appSettings: typeof appSettings;
   branches: typeof branches;
+  branchCapital: typeof branchCapital;
   complaints: typeof complaints;
   collectionReconciliation: typeof collectionReconciliation;
   customerStatements: typeof customerStatements;

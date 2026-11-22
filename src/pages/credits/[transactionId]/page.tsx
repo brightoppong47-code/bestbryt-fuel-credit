@@ -368,6 +368,8 @@ export default function TransactionDetailPage() {
           <Separator />
           <Row icon={<Banknote className="w-4 h-4" />} label="Amount Due" value={`GHS ${fmt(tx.totalOwedGhs)}`} bold />
 
+          {tx.mondayGraceUntil && <p className="text-sm text-muted-foreground py-2">Saturday fuel: first Monday penalty starts at {new Date(tx.mondayGraceUntil).toLocaleString("en-GH", {timeZone:"Africa/Accra"})} (eight-hour extension).</p>}
+
           {tx.livePenalty > 0 && (
             <>
               <Row
