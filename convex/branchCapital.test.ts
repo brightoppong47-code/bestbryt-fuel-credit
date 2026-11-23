@@ -37,7 +37,7 @@ it("separates branch cash and principal from interest and penalties without doub
   await ctx.db.insert("collection_handovers",{branchId:ids.a,staffId:ids.owner,recordedBy:ids.owner,amountGhs:20,method:"cash",recordedAt:new Date().toISOString(),status:"verified"});
  });
  const r=(await owner.query(api.branchCapital.overview,{})).rows;
- expect(r[0]).toMatchObject({cashAvailableGhs:930,principalGhs:60,interestGhs:0,penaltyGhs:10,capitalGhs:990,totalOutstandingGhs:70,overdueGhs:70});
+ expect(r[0]).toMatchObject({cashAvailableGhs:1000,principalGhs:60,interestGhs:0,penaltyGhs:10,capitalGhs:1060,totalOutstandingGhs:70,overdueGhs:70});
  expect(r[1]).toMatchObject({cashAvailableGhs:null,capitalGhs:null,principalGhs:0});
  // A fresh actual count resets the cash estimate without resetting customer debts.
  vi.advanceTimersByTime(1000);
@@ -54,4 +54,21 @@ it("uses the Monday grace in real balance and statement queries",async()=>{
  vi.advanceTimersByTime(1000);
  expect(await owner.query(api.transactions.getTransaction,{transactionId:tx})).toMatchObject({livePenalty:10,remainingGhs:110});
  expect(await owner.query(api.customerStatements.statement,{driverId:ids.driver,fromDate:"2026-11-01",toDate:"2026-11-23"})).toMatchObject({currentPenaltyGhs:10,currentOutstandingGhs:110});
+});
+it("deducts only the current Ghana day's full fuel total from the latest count",async()=>{
+ vi.useFakeTimers();vi.setSystemTime(new Date("2026-11-23T14:00:00Z"));
+ const {t,owner,ids}=await fixture();
+ const issue=async(issuedAt:string,amount:number,status:"paid"|"pending"="pending")=>t.run(ctx=>ctx.db.insert("transactions",{driverId:ids.driver,fuelAmountGhs:amount,interestGhs:0,totalOwedGhs:amount,issuedAt,dueAt:"2026-11-25T00:00:00Z",status,penaltyGhs:0,issuedBy:ids.owner}));
+ await issue("2026-11-22T23:59:59Z",700);
+ await issue("2026-11-23T00:00:00Z",100,"paid");
+ await owner.mutation(api.branchCapital.recordCashCount,{branchId:ids.a,amountGhs:1000,note:"Opening cash base"});
+ vi.advanceTimersByTime(1000);
+ await issue("2026-11-23T13:00:00Z",200);
+ expect((await owner.query(api.branchCapital.overview,{})).rows[0]).toMatchObject({cashAvailableGhs:700,fuelCreditedTodayGhs:300});
+ await owner.mutation(api.branchCapital.recordCashCount,{branchId:ids.a,amountGhs:250,note:"Revised cash base"});
+ expect((await owner.query(api.branchCapital.overview,{})).rows[0].cashAvailableGhs).toBe(-50);
+ vi.setSystemTime(new Date("2026-11-24T00:00:00Z"));
+ expect((await owner.query(api.branchCapital.overview,{})).rows[0]).toMatchObject({cashAvailableGhs:250,fuelCreditedTodayGhs:0});
+ await issue("2026-11-24T00:00:00Z",50);
+ expect((await owner.query(api.branchCapital.overview,{})).rows[0].cashAvailableGhs).toBe(200);
 });

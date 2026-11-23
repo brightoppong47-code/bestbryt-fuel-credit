@@ -23,15 +23,16 @@ export const overview = query({
   handler: async (ctx) => {
     await requireFinance(ctx);
     const now = new Date(), rate = (await readInterestRatePercent(ctx)) / 100;
-    const [branches, drivers, credits, payments, handovers] = await Promise.all([
+    const [branches, drivers, credits] = await Promise.all([
       ctx.db.query("branches").collect(), ctx.db.query("drivers").collect(), ctx.db.query("transactions").collect(),
-      ctx.db.query("payments").collect(), ctx.db.query("collection_handovers").collect(),
     ]);
+    const today = now.toISOString().slice(0, 10);
+    const dayStart = Date.parse(today + "T00:00:00Z"), dayEnd = dayStart + 86400000;
     const driverBranches = new Map(drivers.map(d => [d._id, d.branchId]));
     const rows = await Promise.all(branches.map(async branch => {
       const count = await ctx.db.query("branch_cash_counts").withIndex("by_branch_time", q => q.eq("branchId", branch._id)).order("desc").first();
       let principalGhs = 0, interestGhs = 0, penaltyGhs = 0, overdueGhs = 0, openCredits = 0;
-      let cashChangeGhs = 0, reviewItems = 0;
+      let fuelCreditedTodayGhs = 0;
       for (const tx of credits) {
         if (driverBranches.get(tx.driverId) !== branch._id) continue;
         if (tx.status !== "paid") {
@@ -42,32 +43,17 @@ export const overview = query({
           principalGhs += principal; interestGhs += interest; penaltyGhs += penalty; openCredits++;
           if (now.getTime() > Date.parse(tx.dueAt)) overdueGhs += b.remaining;
         }
-        if (count && tx._creationTime > count._creationTime) {
-          cashChangeGhs -= tx.fuelAmountGhs;
-          if (tx.interestCollectedUpfront) { cashChangeGhs += tx.interestGhs; reviewItems++; }
-        }
+        const issuedAt = Date.parse(tx.issuedAt);
+        if (issuedAt >= dayStart && issuedAt < dayEnd) fuelCreditedTodayGhs += tx.fuelAmountGhs;
       }
-      if (count) {
-        for (const p of payments) {
-          if ((p.branchId ?? driverBranches.get(p.driverId)) !== branch._id || p._creationTime <= count._creationTime) continue;
-          // Company-wallet receipts are not funds held at the branch.
-          if (p.paymentMethod !== "company_momo" && p.reconciliationStatus !== "disputed") cashChangeGhs += p.amountGhs;
-          if (!p.paymentMethod || p.reconciliationStatus !== "verified") reviewItems++;
-        }
-        for (const h of handovers) {
-          if (h.branchId !== branch._id || h._creationTime <= count._creationTime) continue;
-          if (h.status !== "disputed") cashChangeGhs -= h.amountGhs;
-          if (h.status !== "verified") reviewItems++;
-        }
-      }
-      const cashAvailableGhs = count ? money(count.amountGhs + cashChangeGhs) : null;
+      const cashAvailableGhs = count ? money(count.amountGhs - fuelCreditedTodayGhs) : null;
       return { branchId: branch._id, branch: branch.name, active: branch.isActive, cashAvailableGhs,
         principalGhs: money(principalGhs), interestGhs: money(interestGhs), penaltyGhs: money(penaltyGhs),
         totalOutstandingGhs: money(principalGhs + interestGhs + penaltyGhs), overdueGhs: money(overdueGhs), openCredits,
         capitalGhs: cashAvailableGhs === null ? null : money(cashAvailableGhs + principalGhs),
-        lastCountAt: count?.countedAt ?? null, lastCountGhs: count?.amountGhs ?? null, reviewItems,
+        lastCountAt: count?.countedAt ?? null, lastCountGhs: count?.amountGhs ?? null, fuelCreditedTodayGhs: money(fuelCreditedTodayGhs), reviewItems: 0,
       };
     }));
-    return { generatedAt: now.toISOString(), rows: rows.sort((a,b) => a.branch.localeCompare(b.branch)) };
+    return { generatedAt: now.toISOString(), cashDate: today, rows: rows.sort((a,b) => a.branch.localeCompare(b.branch)) };
   },
 });
