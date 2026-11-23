@@ -1,3 +1,4 @@
+import { requireOperationalStaff } from "./helpers";
 import { isBranchStaff, assignedBranchIds, canAccessBranch, assertBranchAccess, assertDriverAccess } from "./helpers";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
@@ -23,7 +24,7 @@ function padSequence(n: number): string {
 export const recordFuelBreak = mutation({
   args: {driverId:v.id("drivers")},
   handler: async(ctx,{driverId})=>{
-    const driver=await assertDriverAccess(ctx,await requireStaff(ctx),driverId);
+    const driver=await assertDriverAccess(ctx,await requireOperationalStaff(ctx),driverId);
     if(!driver.pausedTradingAt)await ctx.db.patch(driverId,{pausedTradingAt:Date.now()});
   }
 });
@@ -31,7 +32,7 @@ export const recordFuelBreak = mutation({
 export const requestFuelAgain = mutation({
   args: {driverId:v.id("drivers"),amount:v.number()},
   handler: async(ctx,{driverId,amount})=>{
-    const user=await requireStaff(ctx);
+    const user=await requireOperationalStaff(ctx);
     const driver=await assertDriverAccess(ctx,user,driverId);
     if(!driver.isActive || !Number.isFinite(amount) || amount<=0 || amount>10000000 || Math.abs(amount*100-Math.round(amount*100))>0.000001)
       throw new ConvexError({message:"Choose an active driver and enter a valid fuel amount.",code:"BAD_REQUEST"});
@@ -70,7 +71,7 @@ export const registerDriver = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireStaff(ctx);
+    const user = await requireOperationalStaff(ctx);
 
     const branch = await ctx.db.get(args.branchId);
     if (!branch?.isActive) throw new ConvexError({ message: "Branch not found", code: "NOT_FOUND" });
@@ -142,7 +143,7 @@ export const updateDriver = mutation({
     isActive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const user = await requireStaff(ctx);
+    const user = await requireOperationalStaff(ctx);
     await assertDriverAccess(ctx, user, args.driverId);
     const { driverId, ...updates } = args;
     if (updates.branchId) assertBranchAccess(user, updates.branchId);

@@ -19,6 +19,7 @@ export default defineSchema({
       v.literal("staff"),
       v.literal("branch_secretary"),
       v.literal("risk_manager"),
+      v.literal("financial_officer"),
     ),
     branchIds: v.optional(v.array(v.id("branches"))),
     // Branch assigned to this user (required for branch_secretary)
@@ -47,6 +48,7 @@ export default defineSchema({
       v.literal("staff"),
       v.literal("branch_secretary"),
       v.literal("risk_manager"),
+      v.literal("financial_officer"),
     ),
     name: v.optional(v.string()), // display name set by admin
     createdBy: v.id("users"),
@@ -69,6 +71,7 @@ export default defineSchema({
   branch_cash_counts: defineTable({
     branchId: v.id("branches"), amountGhs: v.number(), note: v.string(),
     countedAt: v.number(), recordedBy: v.id("users"),
+    actorName:v.optional(v.string()),actorEmail:v.optional(v.string()),actorRole:v.optional(v.string()),
   }).index("by_branch_time", ["branchId", "countedAt"]),
 
   drivers: defineTable({
@@ -191,6 +194,7 @@ export default defineSchema({
     newAdjustmentTotalGhs: v.number(),
     reason: v.string(),
     actorId: v.id("users"),
+    actorName: v.optional(v.string()), actorEmail: v.optional(v.string()), actorRole: v.optional(v.string()),
     createdAt: v.string(),
   }).index("by_transaction", ["transactionId"]).index("by_created_at", ["createdAt"]),
 
@@ -244,6 +248,7 @@ export default defineSchema({
     action: v.union(v.literal("verify"), v.literal("dispute"), v.literal("correct")),
     note: v.string(),
     actorId: v.id("users"),
+    actorName: v.optional(v.string()), actorEmail: v.optional(v.string()), actorRole: v.optional(v.string()),
     occurredAt: v.string(),
   })
     .index("by_branch", ["branchId"])

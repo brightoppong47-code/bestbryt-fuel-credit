@@ -2,7 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 
-export type UserRole = "owner" | "staff" | "branch_secretary" | "risk_manager";
+export type UserRole = "owner" | "staff" | "branch_secretary" | "risk_manager" | "financial_officer";
 
 export async function findCurrentUser(ctx: QueryCtx | MutationCtx) {
   const identity = await ctx.auth.getUserIdentity();
@@ -29,7 +29,7 @@ export async function getCurrentUser(ctx: QueryCtx | MutationCtx) {
 /** Any authenticated app user (all roles) */
 export async function requireStaff(ctx: QueryCtx | MutationCtx) {
   const user = await getCurrentUser(ctx);
-  const allowed: UserRole[] = ["owner", "staff", "branch_secretary", "risk_manager"];
+  const allowed: UserRole[] = ["owner", "staff", "branch_secretary", "risk_manager", "financial_officer"];
   if (!allowed.includes(user.role as UserRole)) {
     throw new ConvexError({ message: "Access denied", code: "FORBIDDEN" });
   }
@@ -57,17 +57,18 @@ export async function requireRiskManagerOrOwner(ctx: QueryCtx | MutationCtx) {
 import type { Doc, Id } from "./_generated/dataModel";
 /** All non-admin staff are always branch-scoped, including when unassigned. */
 export function isBranchStaff(user: Doc<"users">) {
-  return user.role !== "owner";
+  return user.role !== "owner" && user.role !== "financial_officer";
 }
 export function assignedBranchIds(user: Doc<"users">): Id<"branches">[] {
   return [...new Set(user.role === "risk_manager" && user.branchIds !== undefined
     ? user.branchIds : user.branchId ? [user.branchId] : [])];
 }
 export async function validateBranchAssignments(ctx: QueryCtx | MutationCtx, role: UserRole, branchId?: Id<"branches">, branchIds?: Id<"branches">[]) {
+  if (role === "owner" || role === "financial_officer") return {branchId: undefined, branchIds: undefined};
   const ids = [...new Set(role === "risk_manager" ? branchIds ?? (branchId ? [branchId] : []) : branchId ? [branchId] : [])];
   if (ids.length > 50) throw new ConvexError({message:"Choose at most 50 branches",code:"BAD_REQUEST"});
   for (const id of ids) if (!(await ctx.db.get("branches", id))?.isActive) throw new ConvexError({message:"Choose an active branch",code:"BAD_REQUEST"});
-  return {branchId: role === "owner" ? undefined : ids[0], branchIds:role === "risk_manager" ? ids : undefined};
+  return {branchId: ids[0], branchIds:role === "risk_manager" ? ids : undefined};
 }
 export function canAccessBranch(user: Doc<"users">, branchId: Id<"branches"> | undefined) {
   return !isBranchStaff(user) || (!!branchId && assignedBranchIds(user).includes(branchId));
@@ -92,4 +93,20 @@ export async function accessibleDriverIds(ctx: QueryCtx | MutationCtx, user: Doc
   const drivers = (await Promise.all(assignedBranchIds(user).map(branchId =>
     ctx.db.query("drivers").withIndex("by_branch", q => q.eq("branchId", branchId)).collect()))).flat();
   return new Set(drivers.map(d=>d._id));
+}
+
+/** Financial review and debt corrections, without user/settings administration. */
+export async function requireFinance(ctx: QueryCtx | MutationCtx) {
+  const user = await getCurrentUser(ctx);
+  if (user.role !== "owner" && user.role !== "financial_officer") throw new ConvexError({message:"Financial Officer or admin access required",code:"FORBIDDEN"});
+  return user;
+}
+/** Financial officers review money; they cannot originate customer transactions. */
+export async function requireOperationalStaff(ctx: QueryCtx | MutationCtx) {
+  const user = await requireStaff(ctx);
+  if (user.role === "financial_officer") throw new ConvexError({message:"Financial officers cannot record operational transactions",code:"FORBIDDEN"});
+  return user;
+}
+export function auditIdentity(user: {name?: string; email?: string; role: string}) {
+  return {actorName:user.name ?? user.email ?? "Unnamed user", actorEmail:user.email, actorRole:user.role};
 }

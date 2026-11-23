@@ -1,3 +1,4 @@
+import ReconciliationPage from "../reconciliation/page";
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
@@ -43,6 +44,7 @@ export default function CollectionHandoverPage() {
       toast.error(err instanceof ConvexError ? String((err.data as {message?: string}).message ?? "Handover failed") : "Handover failed.");
     } finally { setSaving(false); }
   };
+  if (user?.role === "financial_officer") return <ReconciliationPage />;
   return <div className="p-4 md:p-6 max-w-xl mx-auto space-y-5">
     <h1 className="text-xl font-bold">Staff Collection Handover</h1>
     <p className="text-sm text-muted-foreground">Record money handed to the business. This is not a new customer payment and does not reduce customer debt again.</p>

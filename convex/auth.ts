@@ -21,12 +21,12 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       const existing = await ctx.db.query("users").withIndex("email", q => q.eq("email", email)).first();
       if (existing) throw new Error("A user with this email already exists. Their existing login has not been changed.");
       const role = profile.role;
-      if (role !== "staff" && role !== "branch_secretary" && role !== "risk_manager") throw new Error("Choose a staff role");
+      if (role !== "staff" && role !== "branch_secretary" && role !== "risk_manager" && role !== "financial_officer") throw new Error("Choose a staff role");
       const branchId = ctx.db.normalizeId("branches", String(profile.branchId ?? ""));
       const zone = Array.isArray(profile.branchIds) ? profile.branchIds.map(id => ctx.db.normalizeId("branches", String(id))) : undefined;
       if (zone?.some(id => !id)) throw new Error("Choose valid branches");
       const assignments = await validateBranchAssignments(ctx, role, branchId ?? undefined, zone as import("./_generated/dataModel").Id<"branches">[] | undefined);
-      if (!assignments.branchId) throw new Error("Choose an active branch");
+      if (role !== "financial_officer" && !assignments.branchId) throw new Error("Choose an active branch");
       const userId = await ctx.db.insert("users", {
         tokenIdentifier: `local:${email}`, email, name: String(profile.name ?? "").trim(), role, ...assignments,
         loginMethod: "password",

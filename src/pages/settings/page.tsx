@@ -120,13 +120,14 @@ function AdminCorrections() {
   </CardContent></Card>;
 }
 
-type Role = "owner" | "staff" | "branch_secretary" | "risk_manager";
+type Role = "owner" | "staff" | "branch_secretary" | "risk_manager" | "financial_officer";
 
 const ROLE_LABELS: Record<Role, string> = {
   owner: "Admin / Owner",
   staff: "Staff",
   branch_secretary: "Branch Secretary",
   risk_manager: "Risk Manager",
+  financial_officer: "Financial Officer",
 };
 
 function RoleBadge({ role }: { role: Role }) {
@@ -245,7 +246,7 @@ function AssignRoleDialog({
   };
 
   const unchanged = selectedRole === currentRole &&
-    (selectedRole === "owner" || (selectedRole === "risk_manager" ? JSON.stringify([...zone].sort()) === JSON.stringify([...(currentBranchIds ?? (currentBranchId ? [currentBranchId] : []))].sort()) : selectedBranch === (currentBranchId ?? "none")));
+    (["owner","financial_officer"].includes(selectedRole) || (selectedRole === "risk_manager" ? JSON.stringify([...zone].sort()) === JSON.stringify([...(currentBranchIds ?? (currentBranchId ? [currentBranchId] : []))].sort()) : selectedBranch === (currentBranchId ?? "none")));
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -264,7 +265,7 @@ function AssignRoleDialog({
             </Select>
           </div>
           {selectedRole === "risk_manager" && <BranchZonePicker branches={branches} selected={zone} onChange={setZone} />}
-          {(selectedRole !== "owner" && selectedRole !== "risk_manager") && (
+          {(selectedRole !== "owner" && selectedRole !== "financial_officer" && selectedRole !== "risk_manager") && (
             <div className="space-y-1.5">
               <Label>Assigned Branch *</Label>
               <Select value={selectedBranch} onValueChange={setSelectedBranch}>
@@ -301,7 +302,7 @@ function CreateUserDialog({ open, onClose, initial }: { open: boolean; onClose: 
   const settings=useQuery(api.appSettings.getAppSettings);
   const [name,setName]=useState(initial?.name ?? "");
   const [email,setEmail]=useState(initial?.email ?? "");
-  const [role,setRole]=useState<"staff"|"branch_secretary"|"risk_manager">(initial?.role && initial.role!=="owner" ? initial.role : "staff");
+  const [role,setRole]=useState<"staff"|"branch_secretary"|"risk_manager"|"financial_officer">(initial?.role && initial.role!=="owner" ? initial.role : "staff");
   const [branchId,setBranchId]=useState("");const [zone,setZone]=useState<string[]>([]);const [password,setPassword]=useState("");
   const [loading,setLoading]=useState(false);const [done,setDone]=useState(false);const [error,setError]=useState("");
   const close=()=>{setPassword("");onClose();};
@@ -309,17 +310,17 @@ function CreateUserDialog({ open, onClose, initial }: { open: boolean; onClose: 
     {done ? <div className="space-y-4 py-4"><p className="font-medium">Account created for {email}.</p><p className="text-sm text-muted-foreground">Share the app link and the password you entered privately with this user. They can sign in using the email and password form. Their role and branch are already assigned.</p><Button onClick={close}>Done</Button></div>
     : <form className="space-y-4 mt-2" onSubmit={async e=>{
       e.preventDefault();setLoading(true);setError("");
-      try {await createUser({email,name,password,role,branchId:(role === "risk_manager" ? zone[0] : branchId) as Id<"branches">,branchIds:role === "risk_manager" ? zone as Id<"branches">[] : undefined});setPassword("");setDone(true);}
+      try {await createUser({email,name,password,role,branchId:role === "financial_officer" ? undefined : (role === "risk_manager" ? zone[0] : branchId) as Id<"branches">,branchIds:role === "risk_manager" ? zone as Id<"branches">[] : undefined});setPassword("");setDone(true);}
       catch(err){setError(err instanceof Error ? err.message : "Could not create account");}finally{setLoading(false);}
     }}>
       {!settings?.accountCreationEnabled && <p role="alert" className="text-sm text-muted-foreground">Account creation requires the backend authentication update to be activated first.</p>}
       <div className="space-y-1"><Label htmlFor="new-user-name">Full name</Label><Input id="new-user-name" value={name} onChange={e=>setName(e.target.value)} required disabled={loading}/></div>
       <div className="space-y-1"><Label htmlFor="new-user-email">Email</Label><Input id="new-user-email" type="email" autoComplete="off" value={email} onChange={e=>setEmail(e.target.value)} required disabled={loading}/></div>
       <div className="space-y-1"><Label htmlFor="new-user-password">Initial password</Label><Input id="new-user-password" type="password" autoComplete="new-password" minLength={12} maxLength={128} value={password} onChange={e=>setPassword(e.target.value)} required disabled={loading}/><p className="text-xs text-muted-foreground">12–128 characters. Share it privately; the app will not show it again.</p></div>
-      <div className="space-y-1"><Label htmlFor="new-user-role">Role</Label><select id="new-user-role" className="w-full rounded-md border bg-background p-2" value={role} onChange={e=>setRole(e.target.value as typeof role)} disabled={loading}>{["staff","branch_secretary","risk_manager"].map(r=><option key={r} value={r}>{ROLE_LABELS[r as Role]}</option>)}</select></div>
-      {role === "risk_manager" ? <BranchZonePicker branches={branches} selected={zone} onChange={setZone}/> : <div className="space-y-1"><Label htmlFor="new-user-branch">Assigned branch</Label><select id="new-user-branch" className="w-full rounded-md border bg-background p-2" value={branchId} onChange={e=>setBranchId(e.target.value)} required disabled={loading}><option value="">Choose branch</option>{branches?.filter(b=>b.isActive).map(b=><option key={b._id} value={b._id}>{b.name}</option>)}</select></div>}
+      <div className="space-y-1"><Label htmlFor="new-user-role">Role</Label><select id="new-user-role" className="w-full rounded-md border bg-background p-2" value={role} onChange={e=>setRole(e.target.value as typeof role)} disabled={loading}>{["staff","branch_secretary","risk_manager","financial_officer"].map(r=><option key={r} value={r}>{ROLE_LABELS[r as Role]}</option>)}</select></div>
+      {role === "financial_officer" ? <p className="text-sm">Financial access across all branches.</p> : role === "risk_manager" ? <BranchZonePicker branches={branches} selected={zone} onChange={setZone}/> : <div className="space-y-1"><Label htmlFor="new-user-branch">Assigned branch</Label><select id="new-user-branch" className="w-full rounded-md border bg-background p-2" value={branchId} onChange={e=>setBranchId(e.target.value)} required disabled={loading}><option value="">Choose branch</option>{branches?.filter(b=>b.isActive).map(b=><option key={b._id} value={b._id}>{b.name}</option>)}</select></div>}
       <RoleHint role={role}/>{error&&<p role="alert" className="text-sm text-destructive">{error}</p>}
-      <DialogFooter><Button type="button" variant="secondary" disabled={loading} onClick={close}>Cancel</Button><Button disabled={loading||!settings?.accountCreationEnabled||!(role === "risk_manager" ? zone.length : branchId)||password.length<12}>{loading?"Creating…":"Create account"}</Button></DialogFooter>
+      <DialogFooter><Button type="button" variant="secondary" disabled={loading} onClick={close}>Cancel</Button><Button disabled={loading||!settings?.accountCreationEnabled||!(role === "financial_officer" || (role === "risk_manager" ? zone.length : branchId))||password.length<12}>{loading?"Creating…":"Create account"}</Button></DialogFooter>
     </form>}
   </DialogContent></Dialog>;
 }
@@ -329,6 +330,7 @@ function RoleHint({ role }: { role: Role }) {
     owner: "Full access — manage branches, team roles, all data and reports.",
     staff: "View and register customers, issue fuel credits, record payments and view reports in their assigned branch only.",
     branch_secretary: "Register drivers, issue fuel credits, record payments.",
+    financial_officer: "Review finances across all branches, verify payments and handovers, record cash counts and make audited debt adjustments. No user or business settings access.",
     risk_manager: "Follow up customers 3+ days overdue, register customers and report vehicle faults or other complaints across assigned branches.",
   };
   return (
@@ -566,7 +568,7 @@ export default function SettingsPage() {
                           )}
                         </p>
                         <p className="text-xs text-muted-foreground">{user.email}</p>
-                        {user.role !== "owner" && <p className="text-xs text-muted-foreground">{(user.role === "risk_manager" ? user.branchIds ?? (user.branchId ? [user.branchId] : []) : user.branchId ? [user.branchId] : []).map(id=>branches?.find(b=>b._id===id)?.name ?? "Unknown branch").join(", ") || "No branch assigned"}</p>}
+                        {user.role === "financial_officer" && <p className="text-xs text-muted-foreground">All branches — financial access</p>}{user.role !== "owner" && user.role !== "financial_officer" && <p className="text-xs text-muted-foreground">{(user.role === "risk_manager" ? user.branchIds ?? (user.branchId ? [user.branchId] : []) : user.branchId ? [user.branchId] : []).map(id=>branches?.find(b=>b._id===id)?.name ?? "Unknown branch").join(", ") || "No branch assigned"}</p>}
                       </div>
                     </div>
                     <RoleBadge role={user.role as Role} />
@@ -587,6 +589,7 @@ export default function SettingsPage() {
                 <div key={role} className="flex items-start gap-3">
                   <RoleBadge role={role} />
                   <p className="text-muted-foreground text-xs leading-relaxed pt-0.5">
+                    {role === "financial_officer" && "All-branch financial reports, capital, reconciliation, handover verification and audited debt adjustments."}
                     {role === "owner" && "Full access — manage branches, team roles, all data, and reports."}
                     {role === "staff" && "View and register customers, issue fuel credits, record payments and view reports in their assigned branch only."}
                     {role === "branch_secretary" && "Register and view drivers within their assigned branch only. Issue credits to their branch's drivers, record payments, submit EOD reports."}

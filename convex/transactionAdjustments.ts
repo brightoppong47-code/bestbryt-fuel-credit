@@ -1,7 +1,8 @@
+import { auditIdentity } from "./helpers";
 import { readInterestRatePercent } from "./appSettings";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireOwner } from "./helpers";
+import { requireFinance } from "./helpers";
 import { adjustedBalance } from "./lib/adjustedBalance";
 
 const round = (n: number) => Math.round(n * 100) / 100;
@@ -18,7 +19,7 @@ export const adjust = mutation({
     reason: v.string(),
   },
   handler: async (ctx, args) => {
-    const owner = await requireOwner(ctx);
+    const owner = await requireFinance(ctx);
     const tx = await ctx.db.get(args.transactionId);
     if (!tx) throw new ConvexError({ code: "NOT_FOUND", message: "Transaction not found" });
     if (tx.status === "paid") throw new ConvexError({ code: "CONFLICT", message: "Paid transactions require a separate correction workflow" });
@@ -41,7 +42,7 @@ export const adjust = mutation({
     await ctx.db.insert("transaction_adjustments", {
       transactionId: tx._id, driverId: tx.driverId, component: args.component,
       deltaGhs: round(args.deltaGhs), previousAdjustmentTotalGhs: old,
-      newAdjustmentTotalGhs: next, reason, actorId: owner._id,
+      newAdjustmentTotalGhs: next, reason, actorId: owner._id, ...auditIdentity(owner),
       createdAt: new Date().toISOString(),
     });
     return { newAdjustmentTotalGhs: next };
@@ -51,10 +52,14 @@ export const adjust = mutation({
 export const history = query({
   args: { transactionId: v.id("transactions") },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
-    return await ctx.db.query("transaction_adjustments")
+    await requireFinance(ctx);
+    const rows = await ctx.db.query("transaction_adjustments")
       .withIndex("by_transaction", q => q.eq("transactionId", args.transactionId))
       .order("desc").collect();
+    return await Promise.all(rows.map(async entry => {
+      const actor = await ctx.db.get(entry.actorId);
+      return {...entry, actorName:entry.actorName ?? actor?.name ?? actor?.email ?? "Unknown user", actorEmail:entry.actorEmail ?? actor?.email, actorRole:entry.actorRole ?? actor?.role ?? "Unknown role"};
+    }));
   },
 });
 
@@ -64,7 +69,7 @@ export const history = query({
 export const legacyPauseReview = query({
   args: {},
   handler: async (ctx) => {
-    await requireOwner(ctx);
+    await requireFinance(ctx);
     const now = new Date();
     const transactions = await ctx.db.query("transactions").collect();
     return transactions

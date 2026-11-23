@@ -1,3 +1,4 @@
+import { requireOperationalStaff } from "./helpers";
 import {nextTradingCode, queueRequest, wakeTradingPayment} from "./lib/tradingQueue";
 import { assignedBranchIds, canAccessBranch, isBranchStaff, assertDriverAccess, assertTransactionAccess, accessibleDriverIds } from "./helpers";
 import { penaltyDays, saturdayMondayPenaltyStart } from "./lib/penaltyDays";
@@ -35,7 +36,7 @@ export const issueCredit = mutation({
   },
   handler: async (ctx, args) => {
     const penaltyRate = (await readInterestRatePercent(ctx)) / 100;
-    const user = await requireStaff(ctx);
+    const user = await requireOperationalStaff(ctx);
 
     if (args.fuelAmountGhs <= 0) {
       throw new ConvexError({ message: "Amount must be greater than 0", code: "BAD_REQUEST" });
@@ -147,7 +148,7 @@ export const markPaid = mutation({
   },
   handler: async (ctx, args) => {
     const penaltyRate = (await readInterestRatePercent(ctx)) / 100;
-    const user = await requireStaff(ctx);
+    const user = await requireOperationalStaff(ctx);
     await assertTransactionAccess(ctx, user, args.transactionId);
     const tx = await ctx.db.get(args.transactionId);
     if (!tx) throw new ConvexError({ message: "Transaction not found", code: "NOT_FOUND" });
@@ -206,7 +207,7 @@ export const recordPayment = mutation({
   },
   handler: async (ctx, args) => {
     const penaltyRate = (await readInterestRatePercent(ctx)) / 100;
-    const user = await requireStaff(ctx);
+    const user = await requireOperationalStaff(ctx);
     await assertTransactionAccess(ctx, user, args.transactionId);
     const tx = await ctx.db.get(args.transactionId);
     if (!tx) throw new ConvexError({ message: "Transaction not found", code: "NOT_FOUND" });
@@ -291,7 +292,7 @@ export const refreshPenalties = mutation({
   args: { transactionId: v.id("transactions") },
   handler: async (ctx, args) => {
     const penaltyRate = (await readInterestRatePercent(ctx)) / 100;
-    const user = await requireStaff(ctx);
+    const user = await requireOperationalStaff(ctx);
     await assertTransactionAccess(ctx, user, args.transactionId);
     const tx = await ctx.db.get(args.transactionId);
     if (!tx || tx.status === "paid") return;

@@ -12,8 +12,8 @@ export const authorize = internalQuery({ args:{email:v.string()}, handler: async
 } });
 
 export const createUser = action({
-  args: { email:v.string(), name:v.string(), password:v.string(), branchId:v.id("branches"), branchIds:v.optional(v.array(v.id("branches"))),
-    role:v.union(v.literal("staff"),v.literal("branch_secretary"),v.literal("risk_manager")) },
+  args: { email:v.string(), name:v.string(), password:v.string(), branchId:v.optional(v.id("branches")), branchIds:v.optional(v.array(v.id("branches"))),
+    role:v.union(v.literal("staff"),v.literal("branch_secretary"),v.literal("risk_manager"),v.literal("financial_officer")) },
   handler: async (ctx,args): Promise<{userId:string}> => {
     await ctx.runQuery(internal.accountAdmin.authorize, {email:args.email.trim().toLowerCase()});
     if (!process.env.JWT_PRIVATE_KEY || !process.env.JWKS) throw new Error("Account creation is not activated yet. Complete the backend authentication setup first.");

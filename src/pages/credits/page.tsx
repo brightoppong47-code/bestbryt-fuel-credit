@@ -106,12 +106,12 @@ export default function CreditsPage() {
           <h1 className="text-xl font-bold">Fuel Credits</h1>
           <p className="text-muted-foreground text-sm">All fuel issued on credit</p>
         </div>
-        <Button asChild className="gap-2 shrink-0">
+{user?.role !== "financial_officer" && <Button asChild className="gap-2 shrink-0">
           <Link to="/credits/new"><Plus className="w-4 h-4" /><span className="hidden sm:inline">Issue Credit</span></Link>
-        </Button>
+        </Button>}
       </div>
 
-      {user?.role === "owner" && <div className="space-y-2 max-w-sm">
+      {(user?.role === "owner" || user?.role === "financial_officer") && <div className="space-y-2 max-w-sm">
         <label htmlFor="branch-filter" className="text-sm font-medium">Branch</label>
         <select disabled={!settings?.branchFilteringEnabled} id="branch-filter" className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={branchId ?? ""} onChange={e => setBranchId((e.target.value || undefined) as Id<"branches"> | undefined)}>
           <option value="">All branches</option>

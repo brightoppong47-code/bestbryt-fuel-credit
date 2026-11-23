@@ -2,7 +2,7 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getCurrentUser, findCurrentUser, validateBranchAssignments } from "./helpers";
 
-type Role = "owner" | "staff" | "branch_secretary" | "risk_manager";
+type Role = "owner" | "staff" | "branch_secretary" | "risk_manager" | "financial_officer";
 
 export const updateCurrentUser = mutation({
   args: {},
@@ -89,6 +89,7 @@ export const updateUserRole = mutation({
       v.literal("staff"),
       v.literal("branch_secretary"),
       v.literal("risk_manager"),
+      v.literal("financial_officer"),
     ),
     branchId: v.optional(v.id("branches")),
     branchIds: v.optional(v.array(v.id("branches"))),
@@ -122,6 +123,7 @@ export const createInvite = mutation({
       v.literal("staff"),
       v.literal("branch_secretary"),
       v.literal("risk_manager"),
+      v.literal("financial_officer"),
     ),
     name: v.optional(v.string()),
   },
@@ -204,6 +206,7 @@ export const updateInviteRole = mutation({
       v.literal("staff"),
       v.literal("branch_secretary"),
       v.literal("risk_manager"),
+      v.literal("financial_officer"),
     ),
   },
   handler: async (ctx, args) => {

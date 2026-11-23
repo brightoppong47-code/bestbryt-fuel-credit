@@ -1,7 +1,7 @@
 import { assignedBranchIds, canAccessBranch, isBranchStaff } from "./helpers";
 import { ConvexError, v } from "convex/values";
 import { query } from "./_generated/server";
-import { requireStaff, requireOwner } from "./helpers";
+import { requireStaff, requireFinance } from "./helpers";
 import { allocatePayment } from "./lib/paymentAllocation";
 
 export const collections = query({
@@ -75,7 +75,7 @@ export const collections = query({
 export const adjustmentAudit = query({
   args: { fromDate: v.string(), toDate: v.string() },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireFinance(ctx);
     const valid = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s)) && new Date(s).toISOString().slice(0, 10) === s;
     if (!valid(args.fromDate) || !valid(args.toDate) || args.fromDate > args.toDate) {
       throw new ConvexError({ code: "BAD_REQUEST", message: "Choose a valid date range" });
@@ -100,5 +100,24 @@ export const adjustmentAudit = query({
       },
       rows: rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     };
+  },
+});
+
+/** Unified append-only financial audit: the caller cannot supply the actor identity. */
+export const financialAudit = query({
+  args: {fromDate:v.string(),toDate:v.string()},
+  handler: async (ctx,args) => {
+    await requireFinance(ctx);
+    const valid=(s:string)=>/^\d{4}-\d{2}-\d{2}$/.test(s)&&Number.isFinite(Date.parse(s))&&new Date(s).toISOString().slice(0,10)===s;
+    if(!valid(args.fromDate)||!valid(args.toDate)||args.fromDate>args.toDate) throw new ConvexError("Choose a valid audit date range");
+    const [adjustments,events,users,drivers,branches]=await Promise.all([ctx.db.query("transaction_adjustments").collect(),ctx.db.query("collection_reconciliation_events").collect(),ctx.db.query("users").collect(),ctx.db.query("drivers").collect(),ctx.db.query("branches").collect()]);
+    const userMap=new Map(users.map(u=>[u._id,u])),driverMap=new Map(drivers.map(d=>[d._id,d])),branchMap=new Map(branches.map(b=>[b._id,b]));
+    const identity=(e:{actorId:import("./_generated/dataModel").Id<"users">;actorName?:string;actorEmail?:string;actorRole?:string})=>{
+      const u=userMap.get(e.actorId);return {actorName:e.actorName??u?.name??u?.email??"Unknown user",actorEmail:e.actorEmail??u?.email??"",actorRole:e.actorRole??u?.role??"Unknown role",actorId:e.actorId};
+    };
+    const cashCounts = await ctx.db.query("branch_cash_counts").collect();
+    const rows=[...cashCounts.map(c=>({_id:c._id,date:new Date(c.countedAt).toISOString(),type:"Branch cash count",amountGhs:c.amountGhs,branch:branchMap.get(c.branchId)?.name??"Unknown branch",reference:String(c._id),transactionId:null,reason:c.note,...identity({...c,actorId:c.recordedBy})})),...adjustments.map(a=>({_id:a._id,date:a.createdAt,type:`${a.component} adjustment`,amountGhs:a.deltaGhs,branch:branchMap.get(driverMap.get(a.driverId)?.branchId!)?.name??"Unknown branch",reference:String(a.transactionId),transactionId:String(a.transactionId),reason:a.reason,...identity(a)})),
+      ...events.map(e=>({_id:e._id,date:e.occurredAt,type:`${e.paymentId?"Payment":"Handover"} ${e.action}`,amountGhs:null,branch:branchMap.get(e.branchId)?.name??"Unknown branch",reference:String(e.paymentId??e.handoverId??e._id),transactionId:null,reason:e.note,...identity(e)}))];
+    return rows.filter(r=>r.date.slice(0,10)>=args.fromDate&&r.date.slice(0,10)<=args.toDate).sort((a,b)=>b.date.localeCompare(a.date)||b._id.localeCompare(a._id));
   },
 });

@@ -1,7 +1,9 @@
+import { auditIdentity } from "./helpers";
+import { requireOperationalStaff } from "./helpers";
 import {wakeTradingPayment} from "./lib/tradingQueue";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { assertBranchAccess, requireOwner, requireStaff } from "./helpers";
+import { assertBranchAccess, requireFinance, requireStaff } from "./helpers";
 
 const money = (n: number) => Math.round(n * 100) / 100;
 function positiveAmount(n: number) {
@@ -25,7 +27,7 @@ export const recordHandover = mutation({
     note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireStaff(ctx);
+    const user = await requireOperationalStaff(ctx);
     if (!["owner", "staff", "branch_secretary"].includes(user.role)) throw new ConvexError({ code: "FORBIDDEN", message: "Only collection staff may record handovers" });
     assertBranchAccess(user, args.branchId);
     const branch = await ctx.db.get("branches", args.branchId);
@@ -58,7 +60,7 @@ export const reviewHandover = mutation({
     note: v.string(),
   },
   handler: async (ctx, args) => {
-    const owner = await requireOwner(ctx);
+    const owner = await requireFinance(ctx);
     const handover = await ctx.db.get("collection_handovers", args.handoverId);
     if (!handover) throw new ConvexError({ code: "NOT_FOUND", message: "Handover not found" });
     if (handover.status !== "pending") throw new ConvexError({ code: "CONFLICT", message: "Already reviewed; create a separate correction" });
@@ -68,7 +70,7 @@ export const reviewHandover = mutation({
     await ctx.db.insert("collection_reconciliation_events", {
       branchId: handover.branchId, handoverId: args.handoverId,
       action: args.decision === "verified" ? "verify" : "dispute",
-      note: args.note.trim(), actorId: owner._id, occurredAt: now,
+      note: args.note.trim(), actorId: owner._id, ...auditIdentity(owner), occurredAt: now,
     });
   },
 });
@@ -81,7 +83,7 @@ export const reviewPayment = mutation({
     note: v.string(),
   },
   handler: async (ctx, args) => {
-    const owner = await requireOwner(ctx);
+    const owner = await requireFinance(ctx);
     const payment = await ctx.db.get("payments", args.paymentId);
     if (!payment) throw new ConvexError({ code: "NOT_FOUND", message: "Payment not found" });
     if (payment.reconciliationStatus && payment.reconciliationStatus !== "pending")
@@ -95,7 +97,7 @@ export const reviewPayment = mutation({
     await ctx.db.insert("collection_reconciliation_events", {
       branchId: payment.branchId ?? driver.branchId, paymentId: args.paymentId,
       action: args.decision === "verified" ? "verify" : "dispute",
-      note: args.note.trim(), actorId: owner._id, occurredAt: now,
+      note: args.note.trim(), actorId: owner._id, ...auditIdentity(owner), occurredAt: now,
     });
   },
 });
@@ -110,7 +112,7 @@ export const dailyCollections = query({
     const payments = await ctx.db.query("payments").collect();
     const branchHandovers = await ctx.db.query("collection_handovers").withIndex("by_branch", q => q.eq("branchId", args.branchId)).collect();
 
-const handovers = user.role === "owner"
+const handovers = (user.role === "owner" || user.role === "financial_officer")
   ? branchHandovers
   : branchHandovers.filter(h => h.staffId === user._id);
     const date = (s: string) => s.slice(0, 10) === args.date;

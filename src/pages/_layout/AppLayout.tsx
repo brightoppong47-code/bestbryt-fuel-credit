@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, Navigate, useLocation } from "react-router-dom";
 import { Authenticated, Unauthenticated, AuthLoading, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import { OriginalStaffSignIn } from "@/components/OriginalStaffSignIn";
@@ -25,7 +25,7 @@ import {
 import { useState } from "react";
 import { cn } from "@/lib/utils.ts";
 
-type Role = "owner" | "staff" | "branch_secretary" | "risk_manager";
+type Role = "owner" | "staff" | "branch_secretary" | "risk_manager" | "financial_officer";
 
 type NavItem = {
   to: string;
@@ -37,14 +37,14 @@ type NavItem = {
 
 const ALL_NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true, roles: ["owner", "staff"] },
-  { to: "/drivers", label: "Drivers", icon: Users },
-  { to: "/credits", label: "Fuel Credits", icon: Fuel, roles: ["owner", "staff", "branch_secretary"] },
+  { to: "/drivers", label: "Drivers", icon: Users, roles:["owner","staff","branch_secretary","risk_manager"] },
+  { to: "/credits", label: "Fuel Credits", icon: Fuel, roles: ["financial_officer", "owner", "staff", "branch_secretary"] },
   { to: "/eod", label: "End of Day", icon: ClipboardCheck, roles: ["branch_secretary"] },
   { to: "/risk", label: "Risk Manager", icon: ShieldAlert, roles: ["owner", "risk_manager"] },
   { to: "/messages", label: "Messages", icon: MessageSquare, roles: ["owner", "staff"] },
-  { to: "/reports", label: "Reports", icon: ClipboardList, roles: ["owner", "staff"] },
-  { to: "/reconciliation", label: "Reconciliation", icon: ShieldCheck, roles: ["owner"] },
-  { to: "/handovers", label: "Handovers", icon: HandCoins, roles: ["owner", "staff", "branch_secretary"] },
+  { to: "/reports", label: "Reports", icon: ClipboardList, roles: ["financial_officer", "owner", "staff"] },
+  { to: "/reconciliation", label: "Reconciliation", icon: ShieldCheck, roles: ["financial_officer", "owner"] },
+  { to: "/handovers", label: "Handovers", icon: HandCoins, roles: ["financial_officer", "owner", "staff", "branch_secretary"] },
   { to: "/settings", label: "Settings", icon: Settings, roles: ["owner"] },
 ];
 
@@ -58,6 +58,7 @@ const ROLE_LABELS: Record<Role, string> = {
   staff: "Staff",
   branch_secretary: "Branch Secretary",
   risk_manager: "Risk Manager",
+  financial_officer: "Financial Officer",
 };
 
 function SidebarContent({ onClose }: { onClose?: () => void }) {
@@ -142,6 +143,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
 }
 
 function AppLayout() {
+  const location=useLocation();
   const currentUser = useQuery(api.users.getCurrentUserData);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { settings } = useAppAppearance();
@@ -191,9 +193,9 @@ function AppLayout() {
         </header>
 
         <main className="flex-1 overflow-auto">
-          {!currentUser ? <p className="p-6">Loading account…</p> : currentUser.role !== "owner" && !(currentUser.role === "risk_manager" ? (currentUser.branchIds ?? (currentUser.branchId ? [currentUser.branchId] : [])).length : currentUser.branchId)
+          {!currentUser ? <p className="p-6">Loading account…</p> : currentUser.role !== "owner" && currentUser.role !== "financial_officer" && !(currentUser.role === "risk_manager" ? (currentUser.branchIds ?? (currentUser.branchId ? [currentUser.branchId] : [])).length : currentUser.branchId)
             ? <div className="p-6"><h1 className="text-xl font-bold">Branch assignment required</h1><p className="mt-2 text-muted-foreground">Ask admin to assign your branch before viewing or recording customer data.</p></div>
-            : <Outlet />}
+            : currentUser.role === "financial_officer" && !(["/reports","/reconciliation","/handovers","/credits"].includes(location.pathname) || /^\/credits\/(?!new$)[^/]+$/.test(location.pathname)) ? <Navigate to="/reports" replace /> : <Outlet />}
         </main>
       </div>
     </div>
