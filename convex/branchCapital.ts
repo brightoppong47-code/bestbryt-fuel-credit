@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireOwner } from "./helpers";
+import { requireFinance, auditIdentity } from "./helpers";
 import { readInterestRatePercent } from "./appSettings";
 import { adjustedBalance } from "./lib/adjustedBalance";
 const money = (n: number) => Math.round(n * 100) / 100;
@@ -9,19 +9,19 @@ const money = (n: number) => Math.round(n * 100) / 100;
 export const recordCashCount = mutation({
   args: { branchId: v.id("branches"), amountGhs: v.number(), note: v.string() },
   handler: async (ctx, args) => {
-    const owner = await requireOwner(ctx);
+    const owner = await requireFinance(ctx);
     if (!await ctx.db.get(args.branchId)) throw new ConvexError("Branch not found");
     if (!Number.isFinite(args.amountGhs) || args.amountGhs < 0 || Math.abs(args.amountGhs - money(args.amountGhs)) > 1e-7) throw new ConvexError("Enter a nonnegative cash amount with at most two decimal places");
     const note = args.note.trim();
     if (note.length < 5 || note.length > 500) throw new ConvexError("Enter a cash-count note of 5 to 500 characters");
-    return await ctx.db.insert("branch_cash_counts", { ...args, amountGhs: money(args.amountGhs), note, countedAt: Date.now(), recordedBy: owner._id });
+    return await ctx.db.insert("branch_cash_counts", { ...args, amountGhs: money(args.amountGhs), note, countedAt: Date.now(), recordedBy: owner._id, ...auditIdentity(owner) });
   },
 });
 
 export const overview = query({
   args: {},
   handler: async (ctx) => {
-    await requireOwner(ctx);
+    await requireFinance(ctx);
     const now = new Date(), rate = (await readInterestRatePercent(ctx)) / 100;
     const [branches, drivers, credits, payments, handovers] = await Promise.all([
       ctx.db.query("branches").collect(), ctx.db.query("drivers").collect(), ctx.db.query("transactions").collect(),

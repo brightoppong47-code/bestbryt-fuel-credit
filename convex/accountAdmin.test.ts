@@ -64,3 +64,12 @@ it("admin can create a password risk manager assigned to multiple branches",asyn
  expect(user?.branchIds).toEqual([ids.branchId,branch2]);
  expect(user?.role).toBe("risk_manager");
 });
+
+it("admin creates a global financial officer login without a branch",async()=>{
+ const {t,admin,args}=await fixture();
+ const created=await admin.action(api.accountAdmin.createUser,{...args,email:"finance@example.com",role:"financial_officer",branchId:undefined});
+ const user=await t.run(ctx=>ctx.db.query("users").withIndex("email",q=>q.eq("email","finance@example.com")).unique());
+ expect(user?._id).toBe(created.userId);expect(user?.role).toBe("financial_officer");expect(user?.branchId).toBeUndefined();
+ const signed=await t.action(api.auth.signIn,{provider:"password",params:{email:"finance@example.com",password:args.password,flow:"signIn"}});
+ expect(signed.tokens?.token).toBeTruthy();
+});

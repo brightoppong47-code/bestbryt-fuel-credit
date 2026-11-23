@@ -74,7 +74,7 @@ export default function TransactionDetailPage() {
   );
 
   const currentUser = useQuery(api.users.getCurrentUserData);
-  const isOwner = currentUser?.role === "owner";
+  const isOwner = currentUser?.role === "owner" || currentUser?.role === "financial_officer";
   const adjustmentHistory = useQuery(
     api.transactionAdjustments.history,
     isOwner && transactionId ? { transactionId: transactionId as Id<"transactions"> } : "skip"
@@ -426,7 +426,7 @@ export default function TransactionDetailPage() {
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 text-primary" />
-              Admin Adjustment
+              Financial Adjustment
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -488,7 +488,7 @@ export default function TransactionDetailPage() {
                     {entry.component}: {entry.deltaGhs > 0 ? "+" : ""}GHS {fmt(entry.deltaGhs)}
                   </p>
                   <p>{entry.reason}</p>
-                  <p className="text-muted-foreground">{fmtDate(entry.createdAt)}</p>
+                  <p className="text-muted-foreground">{fmtDate(entry.createdAt)} · {entry.actorName} ({entry.actorRole}){entry.actorEmail ? ` · ${entry.actorEmail}` : ""}</p>
                 </div>
               ))}
             </div>
@@ -574,6 +574,7 @@ export default function TransactionDetailPage() {
         </CardContent>
       </Card>
 
+      {currentUser?.role !== "financial_officer" && <>
       {/* ── Notify Driver ── */}
       <Card>
         <CardHeader className="pb-2">
@@ -685,8 +686,9 @@ export default function TransactionDetailPage() {
         )}
       </Card>
 
+      </>}
       {/* ── Payment Actions ── */}
-      {!isPaid && paymentMode === "none" && (
+      {currentUser?.role !== "financial_officer" && !isPaid && paymentMode === "none" && (
         <div className="grid grid-cols-2 gap-3">
           {/* Part payment */}
           <button
@@ -713,7 +715,7 @@ export default function TransactionDetailPage() {
       )}
 
       {/* Part payment input card */}
-      {!isPaid && paymentMode === "part" && (
+      {currentUser?.role !== "financial_officer" && !isPaid && paymentMode === "part" && (
         <Card className="border-2 border-primary/50">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -796,7 +798,7 @@ export default function TransactionDetailPage() {
       )}
 
       {/* Full payment confirmation card */}
-      {!isPaid && paymentMode === "full" && (
+      {currentUser?.role !== "financial_officer" && !isPaid && paymentMode === "full" && (
         <Card className="border-2 border-green-500">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2 text-green-700 dark:text-green-400">

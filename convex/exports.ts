@@ -270,7 +270,7 @@ export const collections = query({
       if (!daily.has(date)) daily.set(date, { date, principalGhs: 0, interestGhs: 0, penaltyGhs: 0, cashGhs: 0, creditsGhs: 0 });
       return daily.get(date)!;
     };
-    const rows: Array<{ date: string; customer: string; branch: string; principalGhs: number; interestGhs: number; penaltyGhs: number; cashGhs: number; reconstructed: boolean; kind: string }> = [];
+    const rows: Array<{ date: string; customer: string; branch: string; branchId?: Id<"branches">; principalGhs: number; interestGhs: number; penaltyGhs: number; cashGhs: number; reconstructed: boolean; kind: string }> = [];
     // Replay all payments, including those before the selected range, so partial allocations remain consistent.
     const paidByTx = new Map<string, number>();
     for (const p of payments.sort((a,b) => a.recordedAt.localeCompare(b.recordedAt) || a._creationTime - b._creationTime || a._id.localeCompare(b._id))) {
@@ -279,19 +279,19 @@ export const collections = query({
       const previous = paidByTx.get(p.transactionId) ?? 0;
       paidByTx.set(p.transactionId, previous + p.amountGhs);
       const driver = driverMap.get(p.driverId);
-      const paymentBranch = driver?.branchId;
+      const paymentBranch = p.branchId ?? driver?.branchId;
       if (!canAccessBranch(user,paymentBranch) || !inRange(p.recordedAt) || (branchId && paymentBranch !== branchId)) continue;
-      const reconstructed = true;
+      const reconstructed = p.principalGhs === undefined || p.interestGhs === undefined || p.penaltyGhs === undefined;
       const principalGhs = Math.min(p.amountGhs, Math.max(0, tx.fuelAmountGhs - previous));
       const deferredInterest = tx.interestCollectedUpfront ? 0 : tx.interestGhs;
       const interestGhs = Math.min(Math.max(0, p.amountGhs - principalGhs), Math.max(0, deferredInterest - Math.max(0, previous - tx.fuelAmountGhs)));
       const penaltyGhs = Math.max(0, p.amountGhs - principalGhs - interestGhs);
-      const split = { principalGhs, interestGhs, penaltyGhs };
+      const split = reconstructed ? { principalGhs, interestGhs, penaltyGhs } : {principalGhs:p.principalGhs!,interestGhs:p.interestGhs!,penaltyGhs:p.penaltyGhs!};
       const d = day(p.recordedAt);
       for (const k of ["principalGhs", "interestGhs", "penaltyGhs"] as const) { totals[k] += split[k]; d[k] += split[k]; }
       totals.cashGhs += p.amountGhs; d.cashGhs += p.amountGhs;
       totals.paymentsCount++; if (reconstructed) totals.reconstructedCount++;
-      rows.push({ date: p.recordedAt, customer: driver?.fullName ?? "Unknown customer", branch: paymentBranch ? branchMap.get(paymentBranch)?.name ?? "Unknown branch" : "Unknown branch", ...split, cashGhs: p.amountGhs, reconstructed, kind: "Repayment" });
+      rows.push({ date: p.recordedAt, branchId:paymentBranch, customer: driver?.fullName ?? "Unknown customer", branch: paymentBranch ? branchMap.get(paymentBranch)?.name ?? "Unknown branch" : "Unknown branch", ...split, cashGhs: p.amountGhs, reconstructed, kind: "Repayment" });
     }
     for (const tx of transactions) {
       const driver = driverMap.get(tx.driverId);
@@ -306,7 +306,7 @@ export const collections = query({
       if (tx.interestCollectedUpfront) {
         totals.interestGhs += tx.interestGhs; totals.cashGhs += tx.interestGhs;
         d.interestGhs += tx.interestGhs; d.cashGhs += tx.interestGhs;
-        rows.push({ date: tx.issuedAt, customer: driver?.fullName ?? "Unknown customer", branch: driver ? branchMap.get(driver.branchId)?.name ?? "Unknown branch" : "Unknown branch", principalGhs: 0, interestGhs: tx.interestGhs, penaltyGhs: 0, cashGhs: tx.interestGhs, reconstructed: false, kind: "Upfront interest" });
+        rows.push({ date: tx.issuedAt, branchId:driver?.branchId, customer: driver?.fullName ?? "Unknown customer", branch: driver ? branchMap.get(driver.branchId)?.name ?? "Unknown branch" : "Unknown branch", principalGhs: 0, interestGhs: tx.interestGhs, penaltyGhs: 0, cashGhs: tx.interestGhs, reconstructed: false, kind: "Upfront interest" });
       }
     }
     const round = (n: number) => Math.round(n * 100) / 100;
@@ -314,7 +314,11 @@ export const collections = query({
       totals[key] = round(totals[key]); for (const d of daily.values()) d[key] = round(d[key]);
     }
     const creditSummary = [...branchCredits.values()].map(b => ({ ...b, creditsGhs: round(b.creditsGhs) })).sort((a,b) => a.branch.localeCompare(b.branch));
-    return { totals, branchCredits: creditSummary, daily: [...daily.values()].sort((a,b) => a.date.localeCompare(b.date)), rows: rows.sort((a,b) => b.date.localeCompare(a.date)) };
+    const branchSummary = creditSummary.map(b=>{
+      const receipts=rows.filter(r=>r.branchId===b.branchId);
+      return {...b,principalGhs:round(receipts.reduce((s,r)=>s+r.principalGhs,0)),interestGhs:round(receipts.reduce((s,r)=>s+r.interestGhs,0)),penaltyGhs:round(receipts.reduce((s,r)=>s+r.penaltyGhs,0)),cashGhs:round(receipts.reduce((s,r)=>s+r.cashGhs,0))};
+    });
+    return { totals, branchSummary, branchCredits: creditSummary, daily: [...daily.values()].sort((a,b) => a.date.localeCompare(b.date)), rows: rows.sort((a,b) => b.date.localeCompare(a.date)) };
   },
 });
 

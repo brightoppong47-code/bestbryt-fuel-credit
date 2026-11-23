@@ -1,3 +1,4 @@
+import FinancialAuditReport from "./_components/FinancialAuditReport";
 import BranchCapitalReport from "./_components/BranchCapitalReport";
 import CollectionsReport from "./_components/CollectionsReport.tsx";
 import CustomerPurchasesReport from "./_components/CustomerPurchasesReport.tsx";
@@ -312,17 +313,19 @@ function ReportsInner() {
       <TabsList aria-label="Report sections" className="grid w-full grid-cols-2 gap-1 !h-auto p-1.5 md:flex md:flex-wrap md:justify-start">
         <TabsTrigger value="collections" className="min-h-12 whitespace-normal text-center md:min-h-10">Collections</TabsTrigger>
         <TabsTrigger value="customers" className="min-h-12 whitespace-normal text-center md:min-h-10">Customer purchases</TabsTrigger>
-        {user?.role === "owner" && <TabsTrigger value="capital" className="min-h-12 whitespace-normal text-center md:min-h-10">Branch capital</TabsTrigger>}
+        {(user?.role === "owner" || user?.role === "financial_officer") && <TabsTrigger value="capital" className="min-h-12 whitespace-normal text-center md:min-h-10">Branch capital</TabsTrigger>}
+        {(user?.role === "owner" || user?.role === "financial_officer") && <TabsTrigger value="audit" className="min-h-12 whitespace-normal text-center md:min-h-10">Financial audit</TabsTrigger>}
         <TabsTrigger value="statement" className="min-h-12 whitespace-normal text-center md:min-h-10">Customer statement</TabsTrigger>
-        {user?.role === "owner" && <TabsTrigger value="reconciliation" className="min-h-12 whitespace-normal text-center md:min-h-10">Reconciliation</TabsTrigger>}
+        {(user?.role === "owner" || user?.role === "financial_officer") && <TabsTrigger value="reconciliation" className="min-h-12 whitespace-normal text-center md:min-h-10">Reconciliation</TabsTrigger>}
         <TabsTrigger value="eod" className="min-h-12 whitespace-normal text-center md:min-h-10">End-of-day reports</TabsTrigger>
         <TabsTrigger value="outstanding" className="min-h-12 whitespace-normal text-center md:min-h-10">Outstanding balances</TabsTrigger>
       </TabsList>
       <TabsContent value="collections" forceMount className="data-[state=inactive]:hidden"><ReportErrorBoundary title="Collections report"><CollectionsReport /></ReportErrorBoundary></TabsContent>
       <TabsContent value="customers" forceMount className="data-[state=inactive]:hidden"><ReportErrorBoundary title="Customer purchase report"><CustomerPurchasesReport /></ReportErrorBoundary></TabsContent>
-      {user?.role === "owner" && <TabsContent value="capital"><ReportErrorBoundary title="Branch capital"><BranchCapitalReport /></ReportErrorBoundary></TabsContent>}
+      {(user?.role === "owner" || user?.role === "financial_officer") && <TabsContent value="capital"><ReportErrorBoundary title="Branch capital"><BranchCapitalReport /></ReportErrorBoundary></TabsContent>}
+      {(user?.role === "owner" || user?.role === "financial_officer") && <TabsContent value="audit"><ReportErrorBoundary title="Financial audit"><FinancialAuditReport /></ReportErrorBoundary></TabsContent>}
       <TabsContent value="statement" forceMount className="data-[state=inactive]:hidden"><ReportErrorBoundary title="Customer statement"><CustomerStatementReport /></ReportErrorBoundary></TabsContent>
-      {user?.role === "owner" && <TabsContent value="reconciliation" forceMount className="data-[state=inactive]:hidden"><ReportErrorBoundary title="Reconciliation report"><ReconciliationReport /></ReportErrorBoundary></TabsContent>}
+      {(user?.role === "owner" || user?.role === "financial_officer") && <TabsContent value="reconciliation" forceMount className="data-[state=inactive]:hidden"><ReportErrorBoundary title="Reconciliation report"><ReconciliationReport /></ReportErrorBoundary></TabsContent>}
       <TabsContent value="eod" forceMount className="data-[state=inactive]:hidden"><h2 className="text-base font-bold mb-3">Submitted branch end-of-day reports</h2>
         <p className="text-xs text-muted-foreground mb-3">Previously submitted snapshots across branches. Collection filters do not change these historical submissions.</p><ReportErrorBoundary title="End-of-day reports"><EodReportsSection /></ReportErrorBoundary></TabsContent>
       <TabsContent value="outstanding" forceMount className="data-[state=inactive]:hidden"><h2 className="text-base font-bold mb-3">Current outstanding balances</h2>

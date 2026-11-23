@@ -84,6 +84,8 @@ export const sendTransactionAlert = action({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
 
+    const sender = await ctx.runQuery(api.users.getCurrentUserData, {});
+    if (sender?.role === "financial_officer") throw new ConvexError({message:"Operational messaging access required",code:"FORBIDDEN"});
     await ctx.runQuery(api.transactions.getPayments, {transactionId: args.transactionId});
     const data = await ctx.runQuery(internal.messaging_internal.getTransactionForMessage, {
       transactionId: args.transactionId,

@@ -200,7 +200,7 @@ export const listEodReports = query({
     notes?: string;
   }>> => {
     const user = await getCurrentUser(ctx);
-    if (user.role !== "owner" && user.role !== "staff") {
+    if (user.role !== "owner" && user.role !== "staff" && user.role !== "financial_officer") {
       throw new ConvexError({ message: "Access denied", code: "FORBIDDEN" });
     }
 

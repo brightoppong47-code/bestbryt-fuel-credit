@@ -18,8 +18,8 @@ export default function ReconciliationReport() {
   const chosen = branchId || branches?.[0]?._id || "";
   const parsed = new Date(date);
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
-  const report = useQuery(api.reconciliationQueue.list, user?.role === "owner" && chosen && valid ? { branchId: chosen as Id<"branches">, date } : "skip");
-  if (user?.role !== "owner") return null;
+  const report = useQuery(api.reconciliationQueue.list, (user?.role === "owner" || user?.role === "financial_officer") && chosen && valid ? { branchId: chosen as Id<"branches">, date } : "skip");
+  if ((user?.role !== "owner" && user?.role !== "financial_officer")) return null;
   const download = async () => {
     if (!report) return;
     setExporting(true);

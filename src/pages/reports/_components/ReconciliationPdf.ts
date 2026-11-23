@@ -2,8 +2,8 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 export type ReconciliationResults = {
-  payments: { _id: string; amountGhs: number; recordedAt: string; paymentMethod?: string; externalReference?: string; receiptNumber?: string; reconciliationStatus: string }[];
-  handovers: { _id: string; amountGhs: number; recordedAt: string; collectionDate?: string; method: string; externalReference?: string; status: string }[];
+  payments: { _id: string; amountGhs: number; recordedAt: string; paymentMethod?: string; externalReference?: string; receiptNumber?: string; reconciliationStatus: string; reviewerName?:string; reviewerEmail?:string; reviewerRole?:string; reviewedAt?:string; reviewNote?:string }[];
+  handovers: { _id: string; amountGhs: number; recordedAt: string; collectionDate?: string; method: string; externalReference?: string; status: string; reviewerName?:string; reviewerEmail?:string; reviewerRole?:string; reviewedAt?:string; reviewNote?:string }[];
 };
 export const formatGhs = (n: number) => n.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const paymentMethodLabel = (method?: string) => ({ cash: "Cash", company_momo: "Company MoMo", staff_momo: "Staff MoMo" }[method ?? ""] ?? "Unclassified legacy");
@@ -39,9 +39,9 @@ export function createReconciliationPdf(data: ReconciliationResults, branch: str
   };
   table("Reconciliation summary (GHS)", ["Measure", "Amount (GHS)"], reconciliationTotals(data).map(([label, amount]) => [label, formatGhs(amount)]));
   doc.addPage();
-  table("Customer payments", ["Receipt / record ID", "Recorded (UTC)", "Method", "Reference", "Status", "Amount (GHS)"], data.payments.map(p => [p.receiptNumber ?? `Legacy: ${p._id}`, p.recordedAt.replace("T", " ").slice(0, 19), paymentMethodLabel(p.paymentMethod), p.externalReference ?? "-", p.reconciliationStatus, formatGhs(p.amountGhs)]));
+  table("Customer payments", ["Receipt / record ID", "Recorded (UTC)", "Method", "Reference", "Status", "Amount (GHS)", "Reviewed by / time", "Evidence"], data.payments.map(p => [p.receiptNumber ?? `Legacy: ${p._id}`, p.recordedAt.replace("T", " ").slice(0, 19), paymentMethodLabel(p.paymentMethod), p.externalReference ?? "-", p.reconciliationStatus, formatGhs(p.amountGhs),[p.reviewerName,p.reviewerRole,p.reviewerEmail,p.reviewedAt].filter(Boolean).join(" | "),p.reviewNote??"-"]));
   doc.addPage();
-  table("Staff handovers (not additional customer payments)", ["Record ID", "Collection date", "Recorded (UTC)", "Method", "Reference", "Status", "Amount (GHS)"], data.handovers.map(h => [h._id, h.collectionDate ?? "Unallocated legacy", h.recordedAt.replace("T", " ").slice(0, 19), paymentMethodLabel(h.method), h.externalReference ?? "-", h.status, formatGhs(h.amountGhs)]));
+  table("Staff handovers (not additional customer payments)", ["Record ID", "Collection date", "Recorded (UTC)", "Method", "Reference", "Status", "Amount (GHS)", "Reviewed by / time", "Evidence"], data.handovers.map(h => [h._id, h.collectionDate ?? "Unallocated legacy", h.recordedAt.replace("T", " ").slice(0, 19), paymentMethodLabel(h.method), h.externalReference ?? "-", h.status, formatGhs(h.amountGhs),[h.reviewerName,h.reviewerRole,h.reviewerEmail,h.reviewedAt].filter(Boolean).join(" | "),h.reviewNote??"-"]));
   const count = doc.getNumberOfPages();
   for (let i = 1; i <= count; i++) {
     doc.setPage(i); doc.setFillColor(15, 40, 80); doc.rect(0, 0, width, 23, "F");
