@@ -72,3 +72,14 @@ it("deducts only the current Ghana day's full fuel total from the latest count",
  await issue("2026-11-24T00:00:00Z",50);
  expect((await owner.query(api.branchCapital.overview,{})).rows[0].cashAvailableGhs).toBe(200);
 });
+it("filters outstanding branch principal across all pages and prevents cross-branch access",async()=>{
+ const {t,owner,staff,ids}=await fixture();
+ const driverB=await t.run(async ctx=>{const d=await ctx.db.get(ids.driver);const {_id,_creationTime,...fields}=d!;return ctx.db.insert("drivers",{...fields,branchId:ids.b,accountNumber:"B1"});});
+ await t.run(async ctx=>{for(const [driverId,amount,paid] of [[ids.driver,100,40],[ids.driver,200,0],[driverB,300,100]] as const) await ctx.db.insert("transactions",{driverId,fuelAmountGhs:amount,interestGhs:10,interestCollectedUpfront:true,totalOwedGhs:amount,issuedAt:new Date().toISOString(),dueAt:new Date(Date.now()+86400000).toISOString(),status:"pending",penaltyGhs:0,amountPaidGhs:paid,issuedBy:ids.owner});});
+ const all=await owner.query(api.transactions.getOutstandingBalances,{paginationOpts:{numItems:1,cursor:null}});
+ expect(all.page).toHaveLength(1);expect(all.principalGhs).toBe(460);expect(all.branchSummary).toHaveLength(2);
+ const a=await owner.query(api.transactions.getOutstandingBalances,{branchId:ids.a,paginationOpts:{numItems:1,cursor:null}});
+ expect(a.principalGhs).toBe(260);expect(a.branchSummary[0].principalGhs).toBe(260);expect(a.branchSummary).toHaveLength(1);expect(a.page[0].branchId).toBe(ids.a);
+ expect((await staff.query(api.transactions.getOutstandingBalances,{paginationOpts:{numItems:20,cursor:null}})).principalGhs).toBe(260);
+ await expect(staff.query(api.transactions.getOutstandingBalances,{branchId:ids.b,paginationOpts:{numItems:20,cursor:null}})).rejects.toThrow("Branch access denied");
+});

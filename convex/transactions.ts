@@ -552,10 +552,11 @@ export const getDailySummary = query({
 });
 
 export const getOutstandingBalances = query({
-  args: { paginationOpts: paginationOptsValidator },
+  args: { paginationOpts: paginationOptsValidator, branchId: v.optional(v.id("branches")) },
   handler: async (ctx, args) => {
     const penaltyRate = (await readInterestRatePercent(ctx)) / 100;
     const user = await requireStaff(ctx);
+    if (args.branchId && !canAccessBranch(user, args.branchId)) throw new ConvexError("Branch access denied");
     const allowedDrivers = await accessibleDriverIds(ctx, user);
     const now = new Date();
 
@@ -575,6 +576,9 @@ export const getOutstandingBalances = query({
         driverName: driver?.fullName ?? "Unknown",
         driverAccountNumber: driver?.accountNumber ?? "",
         driverPhone: driver?.phone ?? "",
+        branchId: driver?.branchId,
+        branchName: driver ? (await ctx.db.get(driver.branchId))?.name ?? "Unknown branch" : "Unknown branch",
+        principalRemaining: Math.max(0, balance.principal - (tx.amountPaidGhs ?? 0)),
         isOverdue: days > 0,
         overdueDays: days,
         liveTotal,
@@ -583,16 +587,23 @@ export const getOutstandingBalances = query({
       };
     }));
 
+    const filtered = enriched.filter(tx => tx.remaining > 0 && (!args.branchId || tx.branchId === args.branchId));
+    const branchSummary = Array.from(new Set(filtered.map(tx => tx.branchId))).map(branchId => {
+      const items = filtered.filter(tx => tx.branchId === branchId);
+      return { branchId, branchName: items[0].branchName, principalGhs: Math.round(items.reduce((sum, tx) => sum + tx.principalRemaining, 0) * 100) / 100, totalGhs: Math.round(items.reduce((sum, tx) => sum + tx.remaining, 0) * 100) / 100, count: items.length };
+    }).sort((a,b) => a.branchName.localeCompare(b.branchName));
     // Sort by remaining desc
-    enriched.sort((a, b) => b.remaining - a.remaining);
+    filtered.sort((a, b) => b.remaining - a.remaining);
 
     // Manual pagination
     const { numItems, cursor } = args.paginationOpts;
     const startIdx = cursor ? parseInt(cursor) : 0;
-    const page = enriched.slice(startIdx, startIdx + numItems);
-    const nextCursor = startIdx + numItems < enriched.length ? String(startIdx + numItems) : null;
+    const page = filtered.slice(startIdx, startIdx + numItems);
+    const nextCursor = startIdx + numItems < filtered.length ? String(startIdx + numItems) : null;
 
     return {
+      branchSummary,
+      principalGhs: Math.round(filtered.reduce((sum, tx) => sum + tx.principalRemaining, 0) * 100) / 100,
       page,
       isDone: nextCursor === null,
       continueCursor: nextCursor ?? "",
