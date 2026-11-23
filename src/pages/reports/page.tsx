@@ -67,16 +67,16 @@ function DailySummaryChart({ days }: { days: number }) {
   );
 }
 
-function OutstandingList() {
+function OutstandingList({ branchId }: { branchId?: Id<"branches"> }) {
   const [cursor, setCursor] = useState<string | null>(null);
   const [allItems, setAllItems] = useState<Array<{
     _id: Id<"transactions">;
-    driverName: string; driverAccountNumber: string;
+    driverName: string; driverAccountNumber: string; branchName: string; principalRemaining: number;
     isOverdue: boolean; overdueDays: number;
     remaining: number; penalty: number;
     fuelAmountGhs: number; issuedAt: string;
   }>>([]);
-  const result = useQuery(api.transactions.getOutstandingBalances, { paginationOpts: { numItems: 20, cursor } });
+  const result = useQuery(api.transactions.getOutstandingBalances, { branchId, paginationOpts: { numItems: 20, cursor } });
   const currentPage = result?.page ?? [];
   const mergedItems = cursor === null
     ? currentPage
@@ -96,6 +96,8 @@ function OutstandingList() {
   }
   return (
     <div className="space-y-3">
+      <div className="rounded-lg border p-4">Outstanding fuel principal<strong className="block text-xl">GHS {fmt(result?.principalGhs ?? 0)}</strong><p className="text-xs text-muted-foreground">Unpaid fuel only, excluding interest and penalties. Totals include all matching credits, including pages not yet loaded.</p></div>
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr><th className="p-2 text-left">Branch</th><th className="p-2 text-right">Fuel principal outstanding (GHS)</th><th className="p-2 text-right">Total outstanding (GHS)</th></tr></thead><tbody>{result?.branchSummary.map(r=><tr key={r.branchId ?? "unknown"} className="border-t"><td className="p-2">{r.branchName}</td><td className="p-2 text-right">{fmt(r.principalGhs)}</td><td className="p-2 text-right">{fmt(r.totalGhs)}</td></tr>)}</tbody></table></div>
       {mergedItems.map((tx) => (
         <Link key={tx._id} to={`/credits/${tx._id}`} className="block">
           <Card className={`hover:bg-muted/40 transition-colors ${tx.isOverdue ? "border-destructive/40" : ""}`}>
@@ -106,7 +108,7 @@ function OutstandingList() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold truncate">{tx.driverName}</p>
-                  <p className="text-xs text-muted-foreground font-mono">{tx.driverAccountNumber}</p>
+                  <p className="text-xs text-muted-foreground font-mono">{tx.driverAccountNumber}</p><p className="text-xs">{tx.branchName} · Fuel principal outstanding: GHS {fmt(tx.principalRemaining)}</p>
                   <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                     <span className="flex items-center gap-0.5"><Fuel className="w-3 h-3" />GHS {fmt(tx.fuelAmountGhs)} fuel</span>
                     {tx.penalty > 0 && (
@@ -139,6 +141,12 @@ function OutstandingList() {
       )}
     </div>
   );
+}
+
+function OutstandingReport() {
+  const branches = useQuery(api.branches.listBranches, {});
+  const [branchId, setBranchId] = useState("");
+  return <div className="space-y-4"><label className="block text-sm font-medium">Branch<select aria-label="Outstanding branch" className="block w-full rounded border p-2 bg-background" value={branchId} onChange={e=>setBranchId(e.target.value)}><option value="">All accessible branches</option>{[...(branches ?? [])].sort((a,b)=>a.name.localeCompare(b.name)).map(b=><option key={b._id} value={b._id}>{b.name}</option>)}</select></label><OutstandingList key={branchId} branchId={branchId ? branchId as Id<"branches"> : undefined} /></div>;
 }
 
 // ─── EOD Reports Section ──────────────────────────────────────────────────────
@@ -329,7 +337,7 @@ function ReportsInner() {
       <TabsContent value="eod" forceMount className="data-[state=inactive]:hidden"><h2 className="text-base font-bold mb-3">Submitted branch end-of-day reports</h2>
         <p className="text-xs text-muted-foreground mb-3">Previously submitted snapshots across branches. Collection filters do not change these historical submissions.</p><ReportErrorBoundary title="End-of-day reports"><EodReportsSection /></ReportErrorBoundary></TabsContent>
       <TabsContent value="outstanding" forceMount className="data-[state=inactive]:hidden"><h2 className="text-base font-bold mb-3">Current outstanding balances</h2>
-        <p className="text-xs text-muted-foreground mb-3">Current unpaid balances across accessible branches, independent of the collection date range.</p><ReportErrorBoundary title="Outstanding balances"><OutstandingList /></ReportErrorBoundary></TabsContent>
+        <p className="text-xs text-muted-foreground mb-3">Current unpaid balances across accessible branches, independent of the collection date range.</p><ReportErrorBoundary title="Outstanding balances"><OutstandingReport /></ReportErrorBoundary></TabsContent>
     </Tabs>
   </div>;
 }
