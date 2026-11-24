@@ -226,6 +226,7 @@ export default function DriverProfilePage() {
                 </div>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <InfoRow icon={<User className="w-4 h-4" />} label="Ghana Card No." value={driver.ghanaCardNumber ?? "Not recorded"} />
                 <InfoRow icon={<Phone className="w-4 h-4" />} label="Phone" value={driver.phone} />
                 <InfoRow icon={<Car className="w-4 h-4" />} label="Plate Number" value={driver.vehiclePlate} />
                 <InfoRow icon={<User className="w-4 h-4" />} label="Home Address" value={driver.address} />

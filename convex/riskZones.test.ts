@@ -37,7 +37,7 @@ it("risk manager sees all 3+ day overdue customers across the assigned zone only
 });
 it("risk manager can register in a selected zone branch; cannot register outside it",async()=>{
  const {ids,risk}=await fixture();
- const args={fullName:"New customer",phone:"000",address:"Test",vehicleType:"Taxi",vehiclePlate:"NEW",gpsLatitude:0,gpsLongitude:0,branchId:ids.branches[1]};
+ const args={ghanaCardNumber:"TEST-CARD-001",fullName:"New customer",phone:"000",address:"Test",vehicleType:"Taxi",vehiclePlate:"NEW",gpsLatitude:0,gpsLongitude:0,branchId:ids.branches[1]};
  const driver=await risk.mutation(api.drivers.registerDriver,args);
  expect((await risk.query(api.drivers.getDriver,{driverId:driver}))?.branchId).toBe(ids.branches[1]);
  await expect(risk.mutation(api.drivers.registerDriver,{...args,branchId:ids.branches[2]})).rejects.toThrow("assigned branch");

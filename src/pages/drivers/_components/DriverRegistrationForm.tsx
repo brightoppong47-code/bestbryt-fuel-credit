@@ -40,6 +40,7 @@ const schema = z.object({
     .refine(value => Number.isSafeInteger(Math.round(value * 100)) &&
       Math.abs(value * 100 - Math.round(value * 100)) < 0.000001,
       "Use at most two decimal places"),
+  ghanaCardNumber: z.string().trim().min(1, "Ghana Card number is required").max(40, "Use at most 40 characters").transform(value => value.toUpperCase()),
   fullName: z.string().min(2, "Name is required"),
   phone: z.string().min(9, "Valid phone number required"),
   address: z.string().min(3, "Address is required"),
@@ -355,6 +356,11 @@ export default function DriverRegistrationForm() {
               <Label htmlFor="fullName">Full Name *</Label>
               <Input id="fullName" placeholder="John Mensah" {...register("fullName")} />
               {errors.fullName && <p className="text-destructive text-xs">{errors.fullName.message}</p>}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ghanaCardNumber">Ghana Card No. *</Label>
+              <Input id="ghanaCardNumber" required maxLength={40} autoCapitalize="characters" autoComplete="off" {...register("ghanaCardNumber")} />
+              {errors.ghanaCardNumber && <p className="text-destructive text-xs">{errors.ghanaCardNumber.message}</p>}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="phone">Phone Number *</Label>

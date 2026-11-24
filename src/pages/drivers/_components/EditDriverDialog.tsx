@@ -30,6 +30,7 @@ type Driver = {
   address: string;
   vehicleType: string;
   vehiclePlate: string;
+  ghanaCardNumber?: string;
   branchId: Id<"branches">;
   gpsLatitude: number;
   gpsLongitude: number;
@@ -104,6 +105,7 @@ export function EditDriverDialog({ open, onOpenChange, driver }: Props) {
   const [photoRemoved, setPhotoRemoved] = useState(false);
 
   const [form, setForm] = useState({
+    ghanaCardNumber: driver.ghanaCardNumber ?? "",
     fullName: driver.fullName,
     phone: driver.phone,
     address: driver.address,
@@ -176,6 +178,7 @@ export function EditDriverDialog({ open, onOpenChange, driver }: Props) {
 
       await updateDriver({
         driverId: driver._id,
+        ghanaCardNumber: form.ghanaCardNumber.trim() || undefined,
         fullName: form.fullName.trim(),
         phone: form.phone.trim(),
         address: form.address.trim(),
@@ -299,6 +302,7 @@ export function EditDriverDialog({ open, onOpenChange, driver }: Props) {
             <Field label="Full Name *">
               <Input placeholder="John Mensah" {...field("fullName")} />
             </Field>
+            <Field label="Ghana Card No."><Input maxLength={40} autoCapitalize="characters" autoComplete="off" {...field("ghanaCardNumber")} /></Field>
             <Field label="Phone Number *">
               <Input placeholder="+233 XX XXX XXXX" {...field("phone")} />
             </Field>
