@@ -78,6 +78,7 @@ export default defineSchema({
     smartTradingCode: v.optional(v.string()),
     pausedTradingAt: v.optional(v.number()),
     // Identity
+    ghanaCardNumber: v.optional(v.string()), // Optional for existing customers
     fullName: v.string(),
     phone: v.string(),
     address: v.string(),

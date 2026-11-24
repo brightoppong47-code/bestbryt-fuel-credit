@@ -56,6 +56,7 @@ export const requestFuelAgain = mutation({
 export const registerDriver = mutation({
   args: {
     requestedFuelAmountGhs: v.optional(v.number()),
+    ghanaCardNumber: v.optional(v.string()),
     fullName: v.string(),
     phone: v.string(),
     address: v.string(),
@@ -89,6 +90,9 @@ export const registerDriver = mutation({
       throw new ConvexError({ message: "Enter a positive fuel request amount with at most two decimal places", code: "BAD_REQUEST" });
     }
 
+    const ghanaCardNumber = args.ghanaCardNumber?.trim().toUpperCase();
+    if (!ghanaCardNumber || ghanaCardNumber.length > 40) throw new ConvexError("Ghana Card number is required (maximum 40 characters)");
+
     // Claim the next sequence number atomically
     const seq = branch.nextSequence;
     await ctx.db.patch(args.branchId, { nextSequence: seq + 1 });
@@ -99,6 +103,7 @@ export const registerDriver = mutation({
     const tradingCode = await nextTradingCode(ctx);
     const driverId = await ctx.db.insert("drivers", {
       smartTradingCode: tradingCode,
+      ghanaCardNumber,
       fullName: args.fullName,
       phone: args.phone,
       address: args.address,
@@ -127,6 +132,7 @@ export const registerDriver = mutation({
 export const updateDriver = mutation({
   args: {
     driverId: v.id("drivers"),
+    ghanaCardNumber: v.optional(v.string()),
     fullName: v.optional(v.string()),
     phone: v.optional(v.string()),
     address: v.optional(v.string()),
@@ -146,6 +152,10 @@ export const updateDriver = mutation({
     const user = await requireOperationalStaff(ctx);
     await assertDriverAccess(ctx, user, args.driverId);
     const { driverId, ...updates } = args;
+    if (updates.ghanaCardNumber !== undefined) {
+      updates.ghanaCardNumber = updates.ghanaCardNumber.trim().toUpperCase();
+      if (!updates.ghanaCardNumber || updates.ghanaCardNumber.length > 40) throw new ConvexError("Enter a Ghana Card number of at most 40 characters");
+    }
     if (updates.branchId) assertBranchAccess(user, updates.branchId);
     // Validate branch if changing
     if (updates.branchId) {

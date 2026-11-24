@@ -14,7 +14,7 @@ async function fixture() {
     await ctx.db.insert("users", { role: "staff", tokenIdentifier: "test|staff", branchId });
     return { branchId, other };
   });
-  const args = { ...ids, fullName: "Private Name", phone: "0244000000", address: "Private address", vehiclePlate: "REAL-123", vehicleType: "Taxi", gpsLatitude: 5, gpsLongitude: -1 };
+  const args = { ...ids, ghanaCardNumber: "TEST-CARD-001", fullName: "Private Name", phone: "0244000000", address: "Private address", vehiclePlate: "REAL-123", vehicleType: "Taxi", gpsLatitude: 5, gpsLongitude: -1 };
   const { other, ...registration } = args;
   return { t, ids, registration, owner: t.withIdentity({ tokenIdentifier: "test|owner" }), staff: t.withIdentity({ tokenIdentifier: "test|staff" }) };
 }
@@ -170,4 +170,21 @@ it("links ordinary issues, reuses a matching request and wakes the correct trip 
   await t.run(ctx => ctx.db.patch(requests[1]._id, {nextActivityAt:Date.now()+300000}));
   await owner.mutation(api.transactions.markPaid,{transactionId:next});
   expect((await t.run(ctx => ctx.db.get(requests[1]._id)))!.nextActivityAt).toBeLessThanOrEqual(Date.now());
+});
+it("requires Ghana Card for new registrations and preserves legacy customer editing",async()=>{
+ const {t,owner,staff,registration,ids}=await fixture();
+ for(const ghanaCardNumber of [undefined,"", "   ","x".repeat(41)]) {
+  await expect(owner.mutation(api.drivers.registerDriver,{...registration,ghanaCardNumber})).rejects.toThrow("Ghana Card");
+ }
+ expect(await t.run(ctx=>ctx.db.query("drivers").collect())).toHaveLength(0);
+ const driverId=await owner.mutation(api.drivers.registerDriver,{...registration,ghanaCardNumber:" test-card-001 "});
+ expect((await owner.query(api.drivers.getDriver,{driverId}))?.ghanaCardNumber).toBe("TEST-CARD-001");
+ await expect(owner.mutation(api.drivers.updateDriver,{driverId,ghanaCardNumber:" "})).rejects.toThrow("Ghana Card");
+ await t.run(ctx=>ctx.db.patch(driverId,{ghanaCardNumber:undefined}));
+ await owner.mutation(api.drivers.updateDriver,{driverId,fullName:"Legacy customer"});
+ await owner.mutation(api.drivers.updateDriver,{driverId,ghanaCardNumber:" test-card-002 "});
+ expect((await owner.query(api.drivers.getDriver,{driverId}))?.ghanaCardNumber).toBe("TEST-CARD-002");
+ await t.run(ctx=>ctx.db.patch(driverId,{branchId:ids.other}));
+ expect(await staff.query(api.drivers.getDriver,{driverId})).toBeNull();
+ await expect(staff.mutation(api.drivers.updateDriver,{driverId,ghanaCardNumber:"OTHER-CARD"})).rejects.toThrow();
 });
