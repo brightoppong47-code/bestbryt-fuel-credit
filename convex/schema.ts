@@ -200,6 +200,7 @@ export default defineSchema({
 
   // Individual payment records (each partial or full payment on a transaction)
   payments: defineTable({
+    dailyPenaltyGhs: v.optional(v.number()),
     principalGhs: v.optional(v.number()),
     interestGhs: v.optional(v.number()),
     penaltyGhs: v.optional(v.number()),

@@ -21,3 +21,9 @@ it("uses the verification that completes the interest payment or the upfront fue
  expect(traderJourney(credit,[second,first],[]).confirmedInterestAt).toBe(second.reconciledAt);
  expect(traderJourney({...credit,interestCollectedUpfront:true},[],[]).confirmedInterestAt).toBe(credit.issuedAt);
 });
+
+it("uses the daily penalty charged on the receipt for a funded driver's eligible days",()=>{
+ const credit={...tx,interestRatePercent:10};
+ expect(traderJourney(credit,[payment(16,50)],[]).paidDays).toHaveLength(1);
+ expect(traderJourney(credit,[{...payment(16,25),dailyPenaltyGhs:25}],[]).paidDays).toHaveLength(1);
+});

@@ -4,13 +4,17 @@ import {penaltyDays} from "./penaltyDays";
 export function traderJourney(tx:Doc<"transactions">, payments:Doc<"payments">[], faults:Doc<"complaints">[]) {
   const receipts=payments.slice().sort((a,b)=>a.recordedAt.localeCompare(b.recordedAt));
   const base=tx.fuelAmountGhs+(tx.interestCollectedUpfront?0:tx.interestGhs);
-  let collected=0;
+  let paidDayFractions=0;
   const paidDays:string[]=[];
   for(const receipt of receipts){
     const days=penaltyDays(tx.dueAt,new Date(receipt.recordedAt),tx.issuedAt);
     if(receipt.reconciliationStatus!=="verified"||!receipt.penaltyGhs||days<1||days>3)continue;
-    collected+=Math.round(receipt.penaltyGhs*100);
-    while(base>0&&paidDays.length<days&&collected>=Math.round(base*5*(paidDays.length+1))){
+    const dailyCents = Math.round(receipt.dailyPenaltyGhs === undefined
+      ? base * (tx.interestRatePercent ?? 5)
+      : receipt.dailyPenaltyGhs * 100);
+    if (dailyCents <= 0) continue;
+    paidDayFractions += Math.round(receipt.penaltyGhs * 100) / dailyCents;
+    while(paidDays.length<days && paidDayFractions+1e-9 >= paidDays.length+1){
       paidDays.push(receipt.recordedAt);
     }
   }

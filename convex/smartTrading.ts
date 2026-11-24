@@ -184,7 +184,7 @@ export const demoHistory = internalQuery({
     const credits=await ctx.db.query("transactions").withIndex("by_driver",q=>q.eq("driverId",driver._id)).collect();
     const payments=await ctx.db.query("payments").withIndex("by_driver",q=>q.eq("driverId",driver._id)).collect();
     const faults=await ctx.db.query("complaints").withIndex("by_driver",q=>q.eq("driverId",driver._id)).collect();
-    const linked=new Set((await ctx.db.query("smart_trading_requests").withIndex("by_driver",q=>q.eq("driverId",driver._id)).collect()).map(r=>r.transactionId));
+    const linked=new Map((await ctx.db.query("smart_trading_requests").withIndex("by_driver",q=>q.eq("driverId",driver._id)).collect()).map(r=>[r.transactionId,r._id] as const));
     return {driver:driver._id,asOf:Date.now(),credits:credits.map(tx=>{
       const receipts=payments.filter(p=>p.transactionId===tx._id);
       const verified=receipts.filter(p=>p.reconciliationStatus==="verified");
@@ -194,7 +194,7 @@ export const demoHistory = internalQuery({
       const review=!!(tx.principalAdjustmentGhs||tx.interestAdjustmentGhs||tx.penaltyAdjustmentGhs)
         ||receipts.some(p=>p.reconciliationStatus!=="verified"||p.principalGhs===undefined||p.interestGhs===undefined||p.penaltyGhs===undefined)
         || Math.round((tx.amountPaidGhs??0)*100)!==booked;
-      return {linked:linked.has(tx._id),journey:traderJourney(tx,receipts,faults),id:tx._id,issued:tx.issuedAt,due:tx.dueAt,status:tx.status,amount:Math.round(tx.fuelAmountGhs*100),principal,interestPaid:tx.interestGhs>0&&interest>=Math.round(tx.interestGhs*100),review,
+      return {linked:linked.has(tx._id),requestId:linked.get(tx._id)??null,journey:traderJourney(tx,receipts,faults),id:tx._id,issued:tx.issuedAt,due:tx.dueAt,status:tx.status,amount:Math.round(tx.fuelAmountGhs*100),principal,interestPaid:tx.interestGhs>0&&interest>=Math.round(tx.interestGhs*100),review,
         receipts:receipts.map(p=>({date:p.recordedAt,status:p.reconciliationStatus??"unverified",principal:p.principalGhs===undefined?null:Math.round(p.principalGhs*100),penalty:p.penaltyGhs===undefined?null:Math.round(p.penaltyGhs*100)}))};
     })};
   },
