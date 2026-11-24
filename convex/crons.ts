@@ -19,4 +19,4 @@ crons.interval("deliver Smart Trading repayment activity", { minutes: 5 }, inter
 crons.interval("sync selected demo customers", { minutes: 1 }, internal.smartTrading.syncDemoHistory);
 export default crons;
 
-crons.interval("sync active Smart Trading drivers", {minutes:1}, internal.smartTrading.syncActiveDirectory, {});
+crons.interval("sync active Smart Trading drivers", {minutes:5}, internal.smartTrading.syncActiveDirectory, {});
