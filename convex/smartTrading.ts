@@ -1,3 +1,4 @@
+import type { Doc } from "./_generated/dataModel";
 import { traderJourney } from "./lib/traderJourney";
 import { ConvexError, v } from "convex/values";
 import { requireOwner } from "./helpers";
@@ -113,6 +114,26 @@ export const configure = mutation({
   },
 });
 
+// A paid flag alone can also result from an adjustment. Require actual receipts.
+function principalSettledByPayment(tx: Doc<"transactions">, receipts: Doc<"payments">[]) {
+  if (tx.status !== "paid" || !tx.paidAt || !receipts.length ||
+      tx.principalAdjustmentGhs || tx.interestAdjustmentGhs || tx.penaltyAdjustmentGhs) return false;
+  const cents = (n:number) => Math.round(n*100);
+  let paid=0, principal=0;
+  for (const r of receipts) {
+    const parts=[r.principalGhs,r.interestGhs,r.penaltyGhs];
+    if (r.driverId !== tx.driverId || r.transactionId !== tx._id ||
+        (r.reconciliationStatus !== "pending" && r.reconciliationStatus !== "verified") ||
+        parts.some(n=>n===undefined || !Number.isFinite(n) || n<0)) return false;
+    const amount=cents(r.amountGhs);
+    if (amount<=0 || amount!==cents(r.principalGhs!)+cents(r.interestGhs!)+cents(r.penaltyGhs!)) return false;
+    paid+=amount;
+    principal+=cents(r.principalGhs!);
+  }
+  return principal===cents(tx.fuelAmountGhs) && paid===cents(tx.amountPaidGhs??0) &&
+    paid===cents(tx.totalOwedGhs)+cents(tx.penaltyGhs);
+}
+
 export const claimActivity = internalMutation({
   args: {}, handler: async ctx => {
     const request = await ctx.db.query("smart_trading_requests").withIndex("by_activity", q => q.gte("nextActivityAt", 0).lte("nextActivityAt", Date.now())).first();
@@ -124,13 +145,13 @@ export const claimActivity = internalMutation({
     const payments = await ctx.db.query("payments").withIndex("by_transaction", q => q.eq("transactionId", tx._id)).collect();
     const faults=await ctx.db.query("complaints").withIndex("by_driver",q=>q.eq("driverId",tx.driverId)).collect();
     const journey={...traderJourney(tx,payments,faults),marketIssue:true};
-    // Only reconciled receipts move trader money. Unknown legacy allocations need owner review.
+    // Partial payments, interest and penalties use verified allocations.
     const verified = payments.filter(p => p.reconciliationStatus === "verified");
     if (verified.some(p => p.principalGhs === undefined || p.interestGhs === undefined || p.penaltyGhs === undefined)) {
       await ctx.db.patch(request._id, { activityError: "Verified receipt has no component allocation; owner review required" });
       return { skip: true as const, journey, requestId:request._id };
     }
-    const principalPaidGhs = Math.round(verified.reduce((sum,p) => sum + (p.principalGhs ?? 0), 0) * 100) / 100;
+    const principalPaidGhs = principalSettledByPayment(tx,payments) ? tx.fuelAmountGhs : Math.round(verified.reduce((sum,p) => sum + (p.principalGhs ?? 0), 0) * 100) / 100;
     const interestPaidGhs = Math.round(((tx.interestCollectedUpfront ? tx.interestGhs : 0) + verified.reduce((sum,p) => sum + (p.interestGhs ?? 0), 0)) * 100) / 100;
     const penaltyPaidGhs = Math.round(verified.reduce((sum,p) => sum + (p.penaltyGhs ?? 0), 0) * 100) / 100;
     if ((tx.principalAdjustmentGhs ?? 0) !== 0 || (tx.interestAdjustmentGhs ?? 0) !== 0 || (tx.penaltyAdjustmentGhs ?? 0) !== 0) {
@@ -194,7 +215,7 @@ export const demoHistory = internalQuery({
       const review=!!(tx.principalAdjustmentGhs||tx.interestAdjustmentGhs||tx.penaltyAdjustmentGhs)
         ||receipts.some(p=>p.reconciliationStatus!=="verified"||p.principalGhs===undefined||p.interestGhs===undefined||p.penaltyGhs===undefined)
         || Math.round((tx.amountPaidGhs??0)*100)!==booked;
-      return {linked:linked.has(tx._id),requestId:linked.get(tx._id)??null,journey:traderJourney(tx,receipts,faults),id:tx._id,issued:tx.issuedAt,due:tx.dueAt,status:tx.status,amount:Math.round(tx.fuelAmountGhs*100),principal,interestPaid:tx.interestGhs>0&&interest>=Math.round(tx.interestGhs*100),review,
+      return {principalSettledByPayment:principalSettledByPayment(tx,receipts),linked:linked.has(tx._id),requestId:linked.get(tx._id)??null,journey:traderJourney(tx,receipts,faults),id:tx._id,issued:tx.issuedAt,due:tx.dueAt,status:tx.status,amount:Math.round(tx.fuelAmountGhs*100),principal,interestPaid:tx.interestGhs>0&&interest>=Math.round(tx.interestGhs*100),review,
         receipts:receipts.map(p=>({date:p.recordedAt,status:p.reconciliationStatus??"unverified",principal:p.principalGhs===undefined?null:Math.round(p.principalGhs*100),penalty:p.penaltyGhs===undefined?null:Math.round(p.penaltyGhs*100)}))};
     })};
   },

@@ -188,3 +188,17 @@ it("requires Ghana Card for new registrations and preserves legacy customer edit
  expect(await staff.query(api.drivers.getDriver,{driverId})).toBeNull();
  await expect(staff.mutation(api.drivers.updateDriver,{driverId,ghanaCardNumber:"OTHER-CARD"})).rejects.toThrow();
 });
+
+it("exports the fully paid principal before receipt review without releasing deferred interest",async()=>{
+  const {t,owner,registration}=await fixture();
+  const driverId=await owner.mutation(api.drivers.registerDriver,{...registration,requestedFuelAmountGhs:200});
+  const transactionId=await owner.mutation(api.transactions.issueCredit,{driverId,fuelAmountGhs:200});
+  const req=(await owner.query(api.drivers.getDriver,{driverId}))!.tradingRequest!;
+  await t.run(ctx=>ctx.db.patch(req._id,{deliveryStatus:"delivered"}));
+  await owner.mutation(api.transactions.markPaid,{transactionId});
+  const event=await t.mutation(internal.smartTrading.claimActivity,{});
+  expect(event && !event.skip && event.payload.principalPaidGhs).toBe(200);
+  expect(event && !event.skip && event.payload.interestPaidGhs).toBe(0);
+  const feed=await t.query(internal.smartTrading.demoHistory,{driver:driverId});
+  expect(feed?.credits[0].principalSettledByPayment).toBe(true);
+});
