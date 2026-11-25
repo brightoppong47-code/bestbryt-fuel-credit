@@ -1,3 +1,4 @@
+import DailyFuelReport from "./_components/DailyFuelReport";
 import FinancialAuditReport from "./_components/FinancialAuditReport";
 import BranchCapitalReport from "./_components/BranchCapitalReport";
 import CollectionsReport from "./_components/CollectionsReport.tsx";
@@ -320,6 +321,7 @@ function ReportsInner() {
     <Tabs defaultValue="collections" className="gap-4">
       <TabsList aria-label="Report sections" className="grid w-full grid-cols-2 gap-1 !h-auto p-1.5 md:flex md:flex-wrap md:justify-start">
         <TabsTrigger value="collections" className="min-h-12 whitespace-normal text-center md:min-h-10">Collections</TabsTrigger>
+        <TabsTrigger value="daily-fuel" className="min-h-12 whitespace-normal text-center md:min-h-10">Daily fuel credited</TabsTrigger>
         <TabsTrigger value="customers" className="min-h-12 whitespace-normal text-center md:min-h-10">Customer purchases</TabsTrigger>
         {(user?.role === "owner" || user?.role === "financial_officer") && <TabsTrigger value="capital" className="min-h-12 whitespace-normal text-center md:min-h-10">Branch capital</TabsTrigger>}
         {(user?.role === "owner" || user?.role === "financial_officer") && <TabsTrigger value="audit" className="min-h-12 whitespace-normal text-center md:min-h-10">Financial audit</TabsTrigger>}
@@ -329,6 +331,7 @@ function ReportsInner() {
         <TabsTrigger value="outstanding" className="min-h-12 whitespace-normal text-center md:min-h-10">Outstanding balances</TabsTrigger>
       </TabsList>
       <TabsContent value="collections" forceMount className="data-[state=inactive]:hidden"><ReportErrorBoundary title="Collections report"><CollectionsReport /></ReportErrorBoundary></TabsContent>
+      <TabsContent value="daily-fuel"><ReportErrorBoundary title="Daily fuel credited"><DailyFuelReport /></ReportErrorBoundary></TabsContent>
       <TabsContent value="customers" forceMount className="data-[state=inactive]:hidden"><ReportErrorBoundary title="Customer purchase report"><CustomerPurchasesReport /></ReportErrorBoundary></TabsContent>
       {(user?.role === "owner" || user?.role === "financial_officer") && <TabsContent value="capital"><ReportErrorBoundary title="Branch capital"><BranchCapitalReport /></ReportErrorBoundary></TabsContent>}
       {(user?.role === "owner" || user?.role === "financial_officer") && <TabsContent value="audit"><ReportErrorBoundary title="Financial audit"><FinancialAuditReport /></ReportErrorBoundary></TabsContent>}
