@@ -330,16 +330,16 @@ function ReportsInner() {
         <TabsTrigger value="eod" className="min-h-12 whitespace-normal text-center md:min-h-10">End-of-day reports</TabsTrigger>
         <TabsTrigger value="outstanding" className="min-h-12 whitespace-normal text-center md:min-h-10">Outstanding balances</TabsTrigger>
       </TabsList>
-      <TabsContent value="collections" forceMount className="data-[state=inactive]:hidden"><ReportErrorBoundary title="Collections report"><CollectionsReport /></ReportErrorBoundary></TabsContent>
+      <TabsContent value="collections"><ReportErrorBoundary title="Collections report"><CollectionsReport /></ReportErrorBoundary></TabsContent>
       <TabsContent value="daily-fuel"><ReportErrorBoundary title="Daily fuel credited"><DailyFuelReport /></ReportErrorBoundary></TabsContent>
-      <TabsContent value="customers" forceMount className="data-[state=inactive]:hidden"><ReportErrorBoundary title="Customer purchase report"><CustomerPurchasesReport /></ReportErrorBoundary></TabsContent>
+      <TabsContent value="customers"><ReportErrorBoundary title="Customer purchase report"><CustomerPurchasesReport /></ReportErrorBoundary></TabsContent>
       {(user?.role === "owner" || user?.role === "financial_officer") && <TabsContent value="capital"><ReportErrorBoundary title="Branch capital"><BranchCapitalReport /></ReportErrorBoundary></TabsContent>}
       {(user?.role === "owner" || user?.role === "financial_officer") && <TabsContent value="audit"><ReportErrorBoundary title="Financial audit"><FinancialAuditReport /></ReportErrorBoundary></TabsContent>}
-      <TabsContent value="statement" forceMount className="data-[state=inactive]:hidden"><ReportErrorBoundary title="Customer statement"><CustomerStatementReport /></ReportErrorBoundary></TabsContent>
-      {(user?.role === "owner" || user?.role === "financial_officer") && <TabsContent value="reconciliation" forceMount className="data-[state=inactive]:hidden"><ReportErrorBoundary title="Reconciliation report"><ReconciliationReport /></ReportErrorBoundary></TabsContent>}
-      <TabsContent value="eod" forceMount className="data-[state=inactive]:hidden"><h2 className="text-base font-bold mb-3">Submitted branch end-of-day reports</h2>
+      <TabsContent value="statement"><ReportErrorBoundary title="Customer statement"><CustomerStatementReport /></ReportErrorBoundary></TabsContent>
+      {(user?.role === "owner" || user?.role === "financial_officer") && <TabsContent value="reconciliation"><ReportErrorBoundary title="Reconciliation report"><ReconciliationReport /></ReportErrorBoundary></TabsContent>}
+      <TabsContent value="eod"><h2 className="text-base font-bold mb-3">Submitted branch end-of-day reports</h2>
         <p className="text-xs text-muted-foreground mb-3">Previously submitted snapshots across branches. Collection filters do not change these historical submissions.</p><ReportErrorBoundary title="End-of-day reports"><EodReportsSection /></ReportErrorBoundary></TabsContent>
-      <TabsContent value="outstanding" forceMount className="data-[state=inactive]:hidden"><h2 className="text-base font-bold mb-3">Current outstanding balances</h2>
+      <TabsContent value="outstanding"><h2 className="text-base font-bold mb-3">Current outstanding balances</h2>
         <p className="text-xs text-muted-foreground mb-3">Current unpaid balances across accessible branches, independent of the collection date range.</p><ReportErrorBoundary title="Outstanding balances"><OutstandingReport /></ReportErrorBoundary></TabsContent>
     </Tabs>
   </div>;
